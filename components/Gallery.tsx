@@ -1,12 +1,12 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { GeneratedContent } from '../types';
-import { Download, Loader2, Copy, Volume2, Bone, Play, Pause, Film, FileVideo } from './Icons';
+import { Download, Loader2, Copy, Volume2, Bone, Play, Pause, Film, FileVideo, PenTool } from './Icons';
 
 interface GalleryProps {
   items: GeneratedContent[];
   isLoading: boolean;
   onRigImage?: (url: string) => void;
+  onEditImage?: (item: GeneratedContent) => void;
 }
 
 const AnimationPlayer: React.FC<{ frames: string[], thumbnail: string, duration?: number }> = ({ frames, thumbnail, duration = 3 }) => {
@@ -60,13 +60,16 @@ const AnimationPlayer: React.FC<{ frames: string[], thumbnail: string, duration?
     );
 };
 
-const Gallery: React.FC<GalleryProps> = ({ items, isLoading, onRigImage }) => {
+const Gallery: React.FC<GalleryProps> = ({ items, isLoading, onRigImage, onEditImage }) => {
   const [isExporting, setIsExporting] = useState<string | null>(null);
 
-  const handleDownload = (url: string, id: string, type: 'image' | 'audio' | 'animation') => {
+  // Fix: Expanded the allowed types to include 'caption-set' to prevent type mismatch in handleDownloadAll on line 154
+  const handleDownload = (url: string, id: string, type: 'image' | 'audio' | 'animation' | 'caption-set') => {
     const link = document.createElement('a');
     link.href = url;
-    link.download = `lumina-${type}-${id}.${type === 'audio' ? 'wav' : 'png'}`;
+    // Fix: Handle the file extension for each type, adding JSON support for caption sets
+    const extension = type === 'audio' ? 'wav' : (type === 'caption-set' ? 'json' : 'png');
+    link.download = `lumina-${type}-${id}.${extension}`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -255,6 +258,17 @@ const Gallery: React.FC<GalleryProps> = ({ items, isLoading, onRigImage }) => {
                                     </span>
                                     
                                     <div className="flex gap-2">
+                                        {/* Edit Button for manual refinement */}
+                                        {onEditImage && (
+                                            <button 
+                                                onClick={(e) => { e.stopPropagation(); onEditImage(item); }}
+                                                className="flex items-center gap-2 px-3 py-2 bg-zinc-800 text-white text-xs font-bold rounded-full hover:bg-zinc-700 transition-colors"
+                                                title="Edit / Refine"
+                                            >
+                                                <PenTool className="w-3.5 h-3.5" /> Edit
+                                            </button>
+                                        )}
+
                                         {/* Rigging Button - Only if it looks like a 3D model prompt or user manually wants to */}
                                         {onRigImage && (
                                             <button 

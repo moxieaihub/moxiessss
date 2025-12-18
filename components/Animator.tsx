@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { GenerationConfig, Bone, Vector3, Export3DFormat, MeshGeometry } from '../types';
 import { 
@@ -293,7 +294,7 @@ const Animator: React.FC<AnimatorProps> = ({ config, setConfig, onExit }) => {
         };
 
         return (
-            <g className="cursor-pointer" style={{ pointerEvents: 'bounding-box' }}>
+            <g className="cursor-pointer" style={{ pointerEvents: 'bounding-box' as any }}>
                 {/* Z Axis (Blue) */}
                 <line 
                     x1={origin.x} y1={origin.y} x2={pZ.x} y2={pZ.y} 

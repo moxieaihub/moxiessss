@@ -4,8 +4,10 @@ import Header from './components/Header';
 import ControlPanel from './components/ControlPanel';
 import Gallery from './components/Gallery';
 import Animator from './components/Animator';
+import CaptionStudio from './components/CaptionStudio';
+import StoryStudio from './components/StoryStudio';
 import { GenerationConfig, ModelType, AspectRatio, ImageResolution, GeneratedContent, GenerationMode } from './types';
-import { generateImage, generateSpeech } from './services/geminiService';
+import { generateImage, generateSpeech, generateStory } from './services/geminiService';
 
 const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -19,16 +21,28 @@ const App: React.FC = () => {
     aspectRatio: AspectRatio.SQUARE,
     resolution: ImageResolution.RES_1K,
     stylePrompts: [],
-    voice: 'Puck',
+    voice: 'puck',
     isRigging: false,
     boneConfigurations: [],
     animationDuration: 3,
     animationFormat: 'mp4',
-    animationQuality: 'standard'
+    animationQuality: 'standard',
+    storyScenes: [{ id: '1', prompt: '', order: 0 }],
+    storySubjects: [],
+    storyEnvironments: [],
+    storyArtStyles: [],
+    captionPosition: 'bottom',
+    captionColor: 'Pure White',
+    captionSize: 'large',
+    captionStyle: 'bold',
+    captionSegments: []
   });
 
   const handleGenerate = useCallback(async () => {
-    // Basic validation: need prompt OR audio OR (rigging + changes)
+    if (config.mode === GenerationMode.CAPTIONS || config.mode === GenerationMode.STORY) {
+        return;
+    }
+
     const hasPrompt = config.prompt.trim().length > 0;
     const hasAudio = !!config.audioInput;
     const isRiggingValid = config.isRigging && (config.boneConfigurations?.length || 0) > 0;
@@ -43,7 +57,6 @@ const App: React.FC = () => {
         const newAudio = await generateSpeech(config);
         setGeneratedContent(prev => [newAudio, ...prev]);
       } else {
-        // Handle IMAGE, THUMBNAIL, MODEL_3D, and RIGGING
         const newImages = await generateImage(config);
         setGeneratedContent(prev => [...newImages, ...prev]);
       }
@@ -60,14 +73,30 @@ const App: React.FC = () => {
           ...prev,
           isRigging: true,
           referenceImage: imageUrl,
-          boneConfigurations: [], // Reset previous bone changes
-          model: ModelType.FLASH // Ensure Flash is used for multimodal editing
+          boneConfigurations: [],
+          model: ModelType.FLASH
       }));
+  };
+
+  const handleEditImage = (item: GeneratedContent) => {
+    let mode = GenerationMode.IMAGE;
+    const lowerPrompt = item.prompt.toLowerCase();
+    
+    if (lowerPrompt.includes("logo")) mode = GenerationMode.LOGO;
+    else if (lowerPrompt.includes("thumbnail")) mode = GenerationMode.THUMBNAIL;
+
+    setConfig(prev => ({
+      ...prev,
+      mode: mode,
+      prompt: item.prompt,
+      referenceImage: item.url,
+      model: ModelType.FLASH
+    }));
   };
 
   const dismissError = () => setError(null);
 
-  // --- ANIMATOR MODE RENDER ---
+  // --- MODE SPECIFIC WORKSPACES ---
   if (config.mode === GenerationMode.ANIMATOR) {
       return (
           <Animator 
@@ -78,13 +107,32 @@ const App: React.FC = () => {
       );
   }
 
+  if (config.mode === GenerationMode.CAPTIONS) {
+      return (
+          <CaptionStudio 
+            config={config}
+            setConfig={setConfig}
+            onExit={() => setConfig(prev => ({...prev, mode: GenerationMode.IMAGE}))}
+          />
+      );
+  }
+
+  if (config.mode === GenerationMode.STORY) {
+    return (
+      <StoryStudio 
+        config={config}
+        setConfig={setConfig}
+        onExit={() => setConfig(prev => ({...prev, mode: GenerationMode.IMAGE}))}
+      />
+    );
+  }
+
   // --- STANDARD APP RENDER ---
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-200 flex flex-col font-sans">
       <Header />
       
       <main className="flex-1 flex flex-col lg:flex-row h-[calc(100vh-64px)] overflow-hidden">
-        {/* Mobile: Control Panel is top, Desktop: Left Side */}
         <div className="lg:h-full overflow-y-auto lg:overflow-visible z-10 bg-zinc-950">
              <ControlPanel 
                 config={config} 
@@ -94,9 +142,7 @@ const App: React.FC = () => {
              />
         </div>
 
-        {/* Main Gallery Area */}
         <div className="flex-1 relative flex flex-col h-full bg-zinc-950/30 overflow-hidden">
-          {/* Error Toast */}
           {error && (
             <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-md px-4">
               <div className="bg-red-500/10 border border-red-500/50 text-red-200 p-4 rounded-xl shadow-2xl backdrop-blur-md flex items-start gap-3 animate-in slide-in-from-top-4 duration-300">
@@ -120,6 +166,7 @@ const App: React.FC = () => {
             items={generatedContent} 
             isLoading={isLoading} 
             onRigImage={handleEnterRiggingMode}
+            onEditImage={handleEditImage}
           />
         </div>
       </main>

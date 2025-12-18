@@ -1,5 +1,7 @@
 {
   "name": "LuminaGen AI",
   "description": "A professional-grade AI image generator utilizing Google's Gemini Flash, Pro, and Imagen models for stunning visuals.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [
+    "microphone"
+  ]
 }
