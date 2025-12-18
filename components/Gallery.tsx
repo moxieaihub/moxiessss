@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { GeneratedContent } from '../types';
 import { Download, Loader2, Copy, Volume2, Bone, Play, Pause, Film, FileVideo, PenTool } from './Icons';
@@ -63,12 +64,17 @@ const AnimationPlayer: React.FC<{ frames: string[], thumbnail: string, duration?
 const Gallery: React.FC<GalleryProps> = ({ items, isLoading, onRigImage, onEditImage }) => {
   const [isExporting, setIsExporting] = useState<string | null>(null);
 
-  // Fix: Expanded the allowed types to include 'caption-set' to prevent type mismatch in handleDownloadAll on line 154
-  const handleDownload = (url: string, id: string, type: 'image' | 'audio' | 'animation' | 'caption-set') => {
+  // Fix: Expanded the allowed types to include 'video' to prevent type mismatch in handleDownloadAll on line 154
+  const handleDownload = (url: string, id: string, type: 'image' | 'audio' | 'animation' | 'caption-set' | 'video') => {
     const link = document.createElement('a');
     link.href = url;
-    // Fix: Handle the file extension for each type, adding JSON support for caption sets
-    const extension = type === 'audio' ? 'wav' : (type === 'caption-set' ? 'json' : 'png');
+    // Fix: Handle the file extension for each type, adding JSON support for caption sets and mp4 for videos
+    let extension = 'png';
+    if (type === 'audio') extension = 'wav';
+    else if (type === 'video') extension = 'mp4';
+    else if (type === 'caption-set') extension = 'json';
+    else if (type === 'animation') extension = 'webm';
+    
     link.download = `lumina-${type}-${id}.${extension}`;
     document.body.appendChild(link);
     link.click();
@@ -331,6 +337,25 @@ const Gallery: React.FC<GalleryProps> = ({ items, isLoading, onRigImage, onEditI
                                     </button>
                                 </div>
                              </div>
+                        </div>
+                    )}
+
+                    {/* VIDEO CONTENT */}
+                    {item.type === 'video' && (
+                        <div className="relative w-full h-full bg-zinc-900 group aspect-video">
+                            <video src={item.url} className="w-full h-full object-contain" autoPlay loop muted />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/90 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-end p-6">
+                                <p className="text-white text-xs font-medium line-clamp-1 mb-4">{item.prompt}</p>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-[10px] text-zinc-400 bg-black/50 px-2 py-1 rounded">Veo Video • {item.aspectRatio}</span>
+                                    <button 
+                                        onClick={(e) => { e.stopPropagation(); handleDownload(item.url, item.id, 'video'); }}
+                                        className="flex items-center gap-2 px-3 py-1.5 bg-white text-black text-xs font-bold rounded-full hover:bg-zinc-200 transition-colors"
+                                    >
+                                        <Download className="w-3 h-3" /> Download
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     )}
 

@@ -1,7 +1,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { ModelType, AspectRatio, GenerationConfig, GenerationMode, VoiceName, ModelPose, ModelView, ModelMaterial, Bone, BoneConfiguration, AnimationFormat, AnimationQuality, StoryScene, StoryEntity } from '../types';
-import { Zap, Layers, Palette, Copy, ImageIcon, Mic, Volume2, Layout, Upload, X, Square, Trash2, Box, Move, Bone as BoneIcon, Film, Settings, Clock, FileVideo, Cube, Hexagon, BookOpen, Plus, Minus, FilmStrip, MessageSquare, Users, MapPin, PenTool, Users as UserIcon, Check, Link, Loader2, Sparkles, Wand2, ChevronRight, ChevronDown } from './Icons';
+import { Zap, Layers, Palette, Copy, ImageIcon, Mic, Volume2, Layout, Upload, X, Square, Trash2, Box, Move, Bone as BoneIcon, Film, Settings, Clock, FileVideo, Cube, Hexagon, BookOpen, Plus, Minus, FilmStrip, MessageSquare, Users, MapPin, PenTool, Users as UserIcon, Check, Link, Loader2, Sparkles, Wand2, ChevronRight, ChevronDown, TypeIcon } from './Icons';
 import { suggestCaption } from '../services/geminiService';
 
 interface ControlPanelProps {
@@ -19,6 +19,37 @@ const STYLES = [
   { id: 'oil-painting', name: 'Oil Painting', prompt: 'oil painting, textured brushstrokes, classical, masterpiece, traditional art' },
   { id: 'cyberpunk', name: 'Cyberpunk', prompt: 'cyberpunk, neon, futuristic, synthwave, high contrast, dark atmosphere' },
   { id: 'pixel-art', name: 'Pixel Art', prompt: 'pixel art, 16-bit, retro game style, dithering, low res' },
+];
+
+const CAPTION_FONTS = [
+  { id: 'Inter', name: 'Inter (Sans)' },
+  { id: 'Roboto', name: 'Roboto' },
+  { id: 'Open Sans', name: 'Open Sans' },
+  { id: 'Montserrat', name: 'Montserrat' },
+  { id: 'Lato', name: 'Lato' },
+];
+
+const CAPTION_STYLES = [
+  { id: 'bold', name: 'Impact Bold' },
+  { id: 'outline', name: 'Shadow Outline' },
+  { id: 'neon', name: 'Neon Glow' },
+  { id: '3d', name: '3D Extruded' },
+  { id: 'minimalist', name: 'Modern Clean' },
+];
+
+const PLATFORMS = [
+  { id: 'youtube', name: 'YouTube', ratio: AspectRatio.LANDSCAPE_16_9 },
+  { id: 'tiktok', name: 'TikTok/Shorts', ratio: AspectRatio.PORTRAIT_9_16 },
+  { id: 'instagram', name: 'Instagram', ratio: AspectRatio.SQUARE },
+  { id: 'linkedin', name: 'LinkedIn', ratio: AspectRatio.LANDSCAPE_16_9 },
+];
+
+const RATIOS = [
+  { id: AspectRatio.LANDSCAPE_16_9, label: '16:9' },
+  { id: AspectRatio.PORTRAIT_9_16, label: '9:16' },
+  { id: AspectRatio.SQUARE, label: '1:1' },
+  { id: AspectRatio.PHOTO_4_3, label: '4:3' },
+  { id: AspectRatio.PHOTO_3_4, label: '3:4' },
 ];
 
 const VOICES: { id: VoiceName; name: string; gender: string }[] = [
@@ -40,10 +71,14 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ config, setConfig, isLoadin
   const [isSuggestingCaption, setIsSuggestingCaption] = useState(false);
 
   useEffect(() => {
-    if (config.mode === GenerationMode.THUMBNAIL) setConfig(prev => ({ ...prev, aspectRatio: AspectRatio.LANDSCAPE_16_9 }));
-    else if (config.mode === GenerationMode.LOGO) setConfig(prev => ({ ...prev, aspectRatio: AspectRatio.SQUARE }));
+    if (config.mode === GenerationMode.THUMBNAIL) {
+      if (!config.thumbnailPlatform) setConfig(prev => ({ ...prev, thumbnailPlatform: 'youtube', aspectRatio: AspectRatio.LANDSCAPE_16_9 }));
+      if (!config.thumbnailLayout) setConfig(prev => ({ ...prev, thumbnailLayout: 'standard' }));
+    } else if (config.mode === GenerationMode.LOGO) setConfig(prev => ({ ...prev, aspectRatio: AspectRatio.SQUARE }));
     else if (config.mode === GenerationMode.STORY) setConfig(prev => ({ ...prev, aspectRatio: AspectRatio.LANDSCAPE_16_9 }));
     else if (config.mode === GenerationMode.CAPTIONS) setConfig(prev => ({ ...prev, aspectRatio: AspectRatio.PORTRAIT_9_16 }));
+    
+    if (!config.count) setConfig(prev => ({ ...prev, count: 1 }));
   }, [config.mode, setConfig]);
 
   const handleSuggestCaption = async () => {
@@ -55,6 +90,10 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ config, setConfig, isLoadin
     } finally {
       setIsSuggestingCaption(false);
     }
+  };
+
+  const handlePlatformChange = (platform: any) => {
+    setConfig(prev => ({ ...prev, thumbnailPlatform: platform.id, aspectRatio: platform.ratio }));
   };
 
   const handlePromptChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => { setConfig(prev => ({ ...prev, prompt: e.target.value })); };
@@ -152,15 +191,150 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ config, setConfig, isLoadin
 
   const renderImageControls = () => (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+      {config.mode !== GenerationMode.THUMBNAIL && (
+        <div className="space-y-4">
+          <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2">
+            <Zap className="w-3 h-3" /> Engine Selection
+          </label>
+          <div className="flex bg-zinc-950 p-1 rounded-xl border border-zinc-800">
+            <button 
+              onClick={() => setConfig(prev => ({ ...prev, model: ModelType.FLASH_IMAGE }))} 
+              className={`flex-1 py-2 text-[10px] font-black uppercase rounded-lg transition-all ${config.model === ModelType.FLASH_IMAGE ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-600 hover:text-zinc-400'}`}
+            >
+              Flash 2.5
+            </button>
+            <button 
+              onClick={() => setConfig(prev => ({ ...prev, model: ModelType.IMAGEN }))} 
+              className={`flex-1 py-2 text-[10px] font-black uppercase rounded-lg transition-all ${config.model === ModelType.IMAGEN ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-600 hover:text-zinc-400'}`}
+            >
+              Imagen 4
+            </button>
+          </div>
+        </div>
+      )}
+
+      {config.mode === GenerationMode.THUMBNAIL && (
+        <div className="space-y-6">
+          <div className="space-y-3">
+            <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2">Platform Context</label>
+            <div className="grid grid-cols-2 gap-2">
+              {PLATFORMS.map(p => (
+                <button 
+                  key={p.id} 
+                  onClick={() => handlePlatformChange(p)}
+                  className={`p-3 rounded-xl border text-left transition-all ${config.thumbnailPlatform === p.id ? 'bg-indigo-600 border-indigo-500' : 'bg-zinc-950 border-zinc-800 hover:border-zinc-700'}`}
+                >
+                  <div className="flex flex-col">
+                    <span className={`text-[10px] font-black uppercase ${config.thumbnailPlatform === p.id ? 'text-white' : 'text-zinc-400'}`}>{p.name}</span>
+                    <span className="text-[8px] text-zinc-600 font-bold">{p.ratio}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2">Layout Dynamics</label>
+            <div className="flex bg-zinc-950 p-1 rounded-xl border border-zinc-800">
+              <button 
+                onClick={() => setConfig(prev => ({ ...prev, thumbnailLayout: 'standard' }))} 
+                className={`flex-1 py-2 text-[10px] font-black uppercase rounded-lg transition-all ${config.thumbnailLayout === 'standard' ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-600 hover:text-zinc-400'}`}
+              >
+                Standard
+              </button>
+              <button 
+                onClick={() => setConfig(prev => ({ ...prev, thumbnailLayout: 'before-after' }))} 
+                className={`flex-1 py-2 text-[10px] font-black uppercase rounded-lg transition-all ${config.thumbnailLayout === 'before-after' ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-600 hover:text-zinc-400'}`}
+              >
+                Before & After
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-3">
+        <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2">Aspect Ratio</label>
+        <div className="grid grid-cols-5 gap-1.5">
+          {RATIOS.map(r => (
+            <button 
+              key={r.id}
+              onClick={() => setConfig(prev => ({ ...prev, aspectRatio: r.id }))}
+              className={`flex flex-col items-center gap-1.5 py-2.5 rounded-xl border transition-all ${config.aspectRatio === r.id ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg' : 'bg-zinc-950 border-zinc-800 text-zinc-600 hover:border-zinc-700 hover:text-zinc-400'}`}
+            >
+              <div className={`border-2 rounded-sm ${config.aspectRatio === r.id ? 'border-white' : 'border-zinc-700'}`} style={{ 
+                width: r.id === AspectRatio.LANDSCAPE_16_9 ? '14px' : r.id === AspectRatio.PORTRAIT_9_16 ? '8px' : r.id === AspectRatio.SQUARE ? '11px' : r.id === AspectRatio.PHOTO_4_3 ? '13px' : '9px',
+                height: r.id === AspectRatio.LANDSCAPE_16_9 ? '8px' : r.id === AspectRatio.PORTRAIT_9_16 ? '14px' : r.id === AspectRatio.SQUARE ? '11px' : r.id === AspectRatio.PHOTO_4_3 ? '10px' : '12px'
+              }} />
+              <span className="text-[8px] font-black uppercase tracking-tighter">{r.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="space-y-2">
         <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center justify-between">Description <span className="text-zinc-700">{config.prompt.length}/30000</span></label>
         <textarea value={config.prompt} onChange={handlePromptChange} placeholder="Describe your vision in detail..." className="w-full h-32 bg-zinc-950 border border-zinc-800 rounded-2xl p-4 text-sm text-white resize-none focus:border-indigo-500 transition-colors" maxLength={30000} />
       </div>
 
+      {config.mode === GenerationMode.THUMBNAIL && (
+        <div className="p-5 bg-zinc-900/50 border border-zinc-800 rounded-3xl space-y-6">
+          <div className="flex justify-between items-center">
+            <label className="text-[10px] font-black text-indigo-400 uppercase tracking-widest flex items-center gap-2"><MessageSquare className="w-3 h-3"/> Caption Overlay</label>
+            <button onClick={handleSuggestCaption} disabled={isSuggestingCaption || !config.prompt} className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-[9px] font-black uppercase transition-all ${isSuggestingCaption || !config.prompt ? 'text-zinc-700 bg-zinc-900/50' : 'text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/20'}`}>
+              {isSuggestingCaption ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Sparkles className="w-2.5 h-2.5" />} AI Suggest
+            </button>
+          </div>
+          <input type="text" value={config.thumbnailTitle || ''} onChange={(e) => setConfig(prev => ({...prev, thumbnailTitle: e.target.value}))} placeholder="Headline text..." className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-xs text-white focus:border-indigo-500 outline-none" />
+          
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <span className="text-[10px] text-zinc-500 uppercase font-black tracking-widest">Font</span>
+              <select value={config.captionFont || 'Inter'} onChange={(e) => setConfig(prev => ({...prev, captionFont: e.target.value}))} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-2 px-3 text-[10px] text-white outline-none focus:border-indigo-500">
+                {CAPTION_FONTS.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <span className="text-[10px] text-zinc-500 uppercase font-black tracking-widest">Style</span>
+              <select value={config.captionStyle || 'bold'} onChange={(e) => setConfig(prev => ({...prev, captionStyle: e.target.value as any}))} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-2 px-3 text-[10px] text-white outline-none focus:border-indigo-500">
+                {CAPTION_STYLES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <span className="text-[10px] text-zinc-500 uppercase font-black tracking-widest">Area</span>
+              <select value={config.captionPosition || 'bottom'} onChange={(e) => setConfig(prev => ({...prev, captionPosition: e.target.value as any}))} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-2 px-3 text-[10px] text-white outline-none focus:border-indigo-500">
+                <option value="top">Top</option>
+                <option value="center">Center</option>
+                <option value="bottom">Bottom</option>
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <span className="text-[10px] text-zinc-500 uppercase font-black tracking-widest">Scale</span>
+              <select value={config.captionSize || 'large'} onChange={(e) => setConfig(prev => ({...prev, captionSize: e.target.value as any}))} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-2 px-3 text-[10px] text-white outline-none focus:border-indigo-500">
+                <option value="small">Small</option>
+                <option value="medium">Medium</option>
+                <option value="large">Large</option>
+                <option value="xl">XL</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      )}
+
       {(config.mode === GenerationMode.THUMBNAIL || config.mode === GenerationMode.IMAGE) && (
-        <div className="space-y-4 p-4 bg-indigo-500/5 border border-indigo-500/20 rounded-2xl">
-          <div className="flex justify-between items-center"><label className="text-[10px] font-black text-indigo-400 uppercase tracking-widest flex items-center gap-2"><MessageSquare className="w-3 h-3"/> Caption Overlay</label><button onClick={handleSuggestCaption} disabled={isSuggestingCaption || !config.prompt} className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-[9px] font-black uppercase transition-all ${isSuggestingCaption || !config.prompt ? 'text-zinc-700 bg-zinc-900/50' : 'text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/20'}`}>{isSuggestingCaption ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Sparkles className="w-2.5 h-2.5" />} AI Suggest</button></div>
-          <input type="text" value={config.thumbnailTitle || ''} onChange={(e) => setConfig(prev => ({...prev, thumbnailTitle: e.target.value}))} placeholder="Catchy headline text..." className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-xs text-white focus:border-indigo-500 outline-none" />
+        <div className="space-y-3">
+          <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2"><Layers className="w-3 h-3" /> Asset Count</label>
+          <div className="flex gap-2">
+            {[1, 2, 3, 4, 5, 6].map(num => (
+              <button 
+                key={num} 
+                onClick={() => setConfig(prev => ({ ...prev, count: num }))}
+                className={`flex-1 py-2 text-[10px] font-black rounded-lg border transition-all ${config.count === num ? 'bg-indigo-600 border-white text-white shadow-lg' : 'bg-zinc-950 border-zinc-800 text-zinc-600 hover:text-zinc-400'}`}
+              >
+                {num}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
@@ -184,6 +358,14 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ config, setConfig, isLoadin
         <button onClick={() => setMode(GenerationMode.IMAGE)} className={`flex-1 min-w-[70px] py-4 text-[10px] font-black uppercase tracking-widest flex flex-col items-center gap-1.5 transition-all relative ${config.mode === GenerationMode.IMAGE ? 'text-white' : 'text-zinc-600 hover:text-zinc-400'}`}>
           <ImageIcon className="w-4 h-4" /> Image
           {config.mode === GenerationMode.IMAGE && <div className="absolute bottom-0 left-2 right-2 h-0.5 bg-indigo-500 rounded-full"></div>}
+        </button>
+        <button onClick={() => setMode(GenerationMode.VIDEO)} className={`flex-1 min-w-[70px] py-4 text-[10px] font-black uppercase tracking-widest flex flex-col items-center gap-1.5 transition-all relative ${config.mode === GenerationMode.VIDEO ? 'text-white' : 'text-zinc-600 hover:text-zinc-400'}`}>
+          <FileVideo className="w-4 h-4" /> Video
+          {config.mode === GenerationMode.VIDEO && <div className="absolute bottom-0 left-2 right-2 h-0.5 bg-indigo-500 rounded-full"></div>}
+        </button>
+        <button onClick={() => setMode(GenerationMode.THUMBNAIL)} className={`flex-1 min-w-[70px] py-4 text-[10px] font-black uppercase tracking-widest flex flex-col items-center gap-1.5 transition-all relative ${config.mode === GenerationMode.THUMBNAIL ? 'text-white' : 'text-zinc-600 hover:text-zinc-400'}`}>
+          <Layout className="w-4 h-4" /> Thumb
+          {config.mode === GenerationMode.THUMBNAIL && <div className="absolute bottom-0 left-2 right-2 h-0.5 bg-indigo-500 rounded-full"></div>}
         </button>
         <button onClick={() => setMode(GenerationMode.STORY)} className={`flex-1 min-w-[70px] py-4 text-[10px] font-black uppercase tracking-widest flex flex-col items-center gap-1.5 transition-all relative ${config.mode === GenerationMode.STORY ? 'text-white' : 'text-zinc-600 hover:text-zinc-400'}`}>
           <BookOpen className="w-4 h-4" /> Story
@@ -212,8 +394,8 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ config, setConfig, isLoadin
       </div>
 
       <div className="p-6 bg-zinc-950 border-t border-zinc-800">
-        <button onClick={onGenerate} disabled={isLoading || (config.mode !== GenerationMode.CAPTIONS && config.mode !== GenerationMode.ANIMATOR && config.mode !== GenerationMode.STORY && !config.prompt.trim() && !config.audioInput)} className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-2xl flex items-center justify-center gap-3 transition-all transform active:scale-95 ${isLoading ? 'bg-zinc-800 text-zinc-600' : 'bg-indigo-600 text-white hover:bg-indigo-500 shadow-indigo-600/20'}`}>
-          {isLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> Synthesizing</> : <>{config.mode === GenerationMode.STORY ? 'Enter Story Studio' : config.mode === GenerationMode.CAPTIONS ? 'Enter Studio' : config.mode === GenerationMode.ANIMATOR ? 'Enter Animator' : 'Generate Asset'}<Zap className="w-4 h-4 fill-current" /></>}
+        <button onClick={onGenerate} disabled={isLoading || (config.mode !== GenerationMode.CAPTIONS && config.mode !== GenerationMode.ANIMATOR && config.mode !== GenerationMode.STORY && config.mode !== GenerationMode.VIDEO && !config.prompt.trim() && !config.audioInput)} className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-2xl flex items-center justify-center gap-3 transition-all transform active:scale-95 ${isLoading ? 'bg-zinc-800 text-zinc-600' : 'bg-indigo-600 text-white hover:bg-indigo-500 shadow-indigo-600/20'}`}>
+          {isLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> Synthesizing</> : <>{config.mode === GenerationMode.STORY ? 'Enter Story Studio' : config.mode === GenerationMode.CAPTIONS ? 'Enter Studio' : config.mode === GenerationMode.ANIMATOR ? 'Enter Animator' : config.mode === GenerationMode.VIDEO ? 'Enter Video Studio' : 'Generate Asset'}<Zap className="w-4 h-4 fill-current" /></>}
         </button>
         <p className="text-[9px] text-zinc-700 mt-4 text-center font-bold uppercase tracking-widest">Powered by LuminaGen Master Engine</p>
       </div>

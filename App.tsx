@@ -6,6 +6,7 @@ import Gallery from './components/Gallery';
 import Animator from './components/Animator';
 import CaptionStudio from './components/CaptionStudio';
 import StoryStudio from './components/StoryStudio';
+import VideoStudio from './components/VideoStudio';
 import { GenerationConfig, ModelType, AspectRatio, ImageResolution, GeneratedContent, GenerationMode } from './types';
 import { generateImage, generateSpeech, generateStory } from './services/geminiService';
 
@@ -17,7 +18,7 @@ const App: React.FC = () => {
   const [config, setConfig] = useState<GenerationConfig>({
     mode: GenerationMode.IMAGE,
     prompt: '',
-    model: ModelType.FLASH,
+    model: ModelType.FLASH_IMAGE,
     aspectRatio: AspectRatio.SQUARE,
     resolution: ImageResolution.RES_1K,
     stylePrompts: [],
@@ -31,6 +32,8 @@ const App: React.FC = () => {
     storySubjects: [],
     storyEnvironments: [],
     storyArtStyles: [],
+    thumbnailPlatform: 'youtube',
+    thumbnailLayout: 'standard',
     captionPosition: 'bottom',
     captionColor: 'Pure White',
     captionSize: 'large',
@@ -39,7 +42,7 @@ const App: React.FC = () => {
   });
 
   const handleGenerate = useCallback(async () => {
-    if (config.mode === GenerationMode.CAPTIONS || config.mode === GenerationMode.STORY) {
+    if (config.mode === GenerationMode.CAPTIONS || config.mode === GenerationMode.STORY || config.mode === GenerationMode.VIDEO || config.mode === GenerationMode.ANIMATOR) {
         return;
     }
 
@@ -74,7 +77,7 @@ const App: React.FC = () => {
           isRigging: true,
           referenceImage: imageUrl,
           boneConfigurations: [],
-          model: ModelType.FLASH
+          model: ModelType.FLASH_IMAGE
       }));
   };
 
@@ -90,7 +93,7 @@ const App: React.FC = () => {
       mode: mode,
       prompt: item.prompt,
       referenceImage: item.url,
-      model: ModelType.FLASH
+      model: ModelType.FLASH_IMAGE
     }));
   };
 
@@ -105,6 +108,16 @@ const App: React.FC = () => {
              onExit={() => setConfig(prev => ({...prev, mode: GenerationMode.IMAGE}))}
           />
       );
+  }
+
+  if (config.mode === GenerationMode.VIDEO) {
+    return (
+        <VideoStudio 
+          config={config}
+          setConfig={setConfig}
+          onExit={() => setConfig(prev => ({...prev, mode: GenerationMode.IMAGE}))}
+        />
+    );
   }
 
   if (config.mode === GenerationMode.CAPTIONS) {

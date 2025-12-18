@@ -1,9 +1,13 @@
 
 export enum ModelType {
-  FLASH = 'gemini-2.5-flash-image',
+  FLASH = 'gemini-3-flash-preview',
+  PRO = 'gemini-3-pro-preview',
+  FLASH_IMAGE = 'gemini-2.5-flash-image',
+  PRO_IMAGE = 'gemini-3-pro-image-preview',
   IMAGEN = 'imagen-4.0-generate-001',
   TTS = 'gemini-2.5-flash-preview-tts',
-  NATIVE_AUDIO = 'gemini-2.5-flash-native-audio-preview-09-2025'
+  NATIVE_AUDIO = 'gemini-2.5-flash-native-audio-preview-09-2025',
+  VEO = 'veo-3.1-fast-generate-preview'
 }
 
 export enum GenerationMode {
@@ -14,13 +18,16 @@ export enum GenerationMode {
   ANIMATOR = 'animator',
   STORY = 'story',
   LOGO = 'logo',
-  CAPTIONS = 'captions'
+  CAPTIONS = 'captions',
+  VIDEO = 'video'
 }
 
 export enum AspectRatio {
   SQUARE = '1:1',
   LANDSCAPE_16_9 = '16:9',
-  PORTRAIT_9_16 = '9:16'
+  PORTRAIT_9_16 = '9:16',
+  PHOTO_4_3 = '4:3',
+  PHOTO_3_4 = '3:4'
 }
 
 export enum ImageResolution {
@@ -28,6 +35,8 @@ export enum ImageResolution {
   RES_2K = '2K',
   RES_4K = '4K'
 }
+
+export type VideoResolution = '720p' | '1080p';
 
 export type VoiceName = 'puck' | 'charon' | 'kore' | 'fenrir' | 'zephyr' | 'aoede' | 'leda' | 'orus';
 
@@ -87,9 +96,11 @@ export interface GenerationConfig {
   model: ModelType;
   aspectRatio: AspectRatio;
   resolution: ImageResolution;
+  videoResolution?: VideoResolution;
   count?: number;
   stylePrompts?: string[];
   referenceImage?: string | null;
+  referenceImages?: string[];
   
   // Audio specific
   voice?: VoiceName;
@@ -99,6 +110,8 @@ export interface GenerationConfig {
 
   // Thumbnail specific
   thumbnailTitle?: string;
+  thumbnailPlatform?: 'youtube' | 'tiktok' | 'instagram' | 'linkedin';
+  thumbnailLayout?: 'standard' | 'before-after';
   captionColor?: string;
   captionSize?: 'small' | 'medium' | 'large' | 'xl';
   captionStyle?: 'bold' | 'outline' | 'neon' | '3d' | 'minimalist' | 'gradient';
@@ -135,7 +148,7 @@ export interface GenerationConfig {
 
 export interface GeneratedContent {
   id: string;
-  type: 'image' | 'audio' | 'animation' | 'caption-set';
+  type: 'image' | 'audio' | 'animation' | 'caption-set' | 'video';
   url: string;
   prompt: string;
   model: ModelType | string;

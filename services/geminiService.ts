@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Modality } from "@google/genai";
-import { ModelType, GenerationConfig, GeneratedContent, GenerationMode, MeshGeometry } from "../types";
+import { ModelType, GenerationConfig, GeneratedContent, GenerationMode, MeshGeometry, ImageResolution, AspectRatio } from "../types";
 
 // Convert Base64 PCM to a Playable WAV Blob directly
 const base64ToWavBlob = (base64: string, sampleRate: number = 24000): Blob => {
@@ -150,13 +150,10 @@ export const generateSpeech = async (config: GenerationConfig): Promise<Generate
   const timestamp = Date.now();
 
   try {
-    // CRITICAL: Always use TTS model for static speech generation. 
-    // gemini-2.5-flash-native-audio-preview-09-2025 is FORBIDDEN for generateContent.
     const model = ModelType.TTS; 
     let contents: any[] = [];
     let speechConfig: any = {};
 
-    // 1. DIALOG MODE (Multi-Speaker TTS)
     if (config.speechMode === 'dialog' && config.dialogTurns && config.dialogTurns.length > 0) {
         const validTurns = config.dialogTurns.filter(t => t.text.trim().length > 0);
         if (validTurns.length === 0) throw new Error("Dialog script is empty.");
@@ -179,7 +176,6 @@ export const generateSpeech = async (config: GenerationConfig): Promise<Generate
             }
         };
     }
-    // 2. SPEECH TO SPEECH / VOICE CLONING (Handled as TTS with context or response)
     else if (config.audioInput) {
         const base64Data = config.audioInput.split(',')[1];
         const mimeType = config.audioInput.split(';')[0].split(':')[1] || 'audio/wav';
@@ -197,7 +193,6 @@ export const generateSpeech = async (config: GenerationConfig): Promise<Generate
             },
         };
     }
-    // 3. TEXT TO SPEECH
     else {
         if (!config.prompt || config.prompt.trim().length === 0) {
              throw new Error("Text prompt is required for speech generation.");
@@ -235,22 +230,17 @@ export const generateSpeech = async (config: GenerationConfig): Promise<Generate
     }
     
     if (!base64Audio) {
-        console.error("Full response for debug:", response);
-        throw new Error("The model did not return any audio data. This may be due to an unsupported configuration or safety filter.");
+        throw new Error("The model did not return any audio data.");
     }
 
     const wavBlob = base64ToWavBlob(base64Audio, 24000); 
     const audioUrl = URL.createObjectURL(wavBlob);
     
-    let displayPrompt = config.prompt;
-    if (config.audioInput) displayPrompt = "Voice Clone / Response";
-    if (config.speechMode === 'dialog') displayPrompt = "Multi-speaker Dialog";
-
     return {
       id: `${timestamp}-audio`,
       type: 'audio',
       url: audioUrl,
-      prompt: displayPrompt || "AI Speech",
+      prompt: config.prompt || "AI Speech",
       model: model,
       timestamp,
       voice: config.voice
@@ -261,85 +251,162 @@ export const generateSpeech = async (config: GenerationConfig): Promise<Generate
   }
 };
 
-export const generateStory = async (config: GenerationConfig): Promise<GeneratedContent[]> => {
+/**
+ * Free alternative to Veo: Generates a sequence of related frames for looping animation using flash-image.
+ * Upgraded for 10-second duration and anti-blinking consistency.
+ */
+export const generateFlipbook = async (config: GenerationConfig, onProgress?: (msg: string) => void): Promise<GeneratedContent> => {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const timestamp = Date.now();
-    const images: GeneratedContent[] = [];
-    const scenes = (config.storyScenes || [])
-        .filter(s => s.prompt.trim().length > 0)
-        .sort((a, b) => a.order - b.order);
+    const frames: string[] = [];
 
-    if (scenes.length === 0) throw new Error("No scenes to generate");
-    const activeSubjects = config.storySubjects?.filter(s => s.isActive !== false) || [];
-    const activeEnvironments = config.storyEnvironments?.filter(s => s.isActive !== false) || [];
-    const activeStyles = config.storyArtStyles?.filter(s => s.isActive !== false) || [];
-    let previousSceneBase64: string | null = null;
+    if (!config.referenceImage) throw new Error("Reference image is required for animation.");
 
-    for (let i = 0; i < scenes.length; i++) {
-        const scene = scenes[i];
-        const contentParts: any[] = [];
-        let promptText = `TASK: Generate a cinematic image for Scene ${i + 1} of a story.\n\n`;
-        promptText += `CRITICAL INSTRUCTION: STYLISTIC AND CHARACTER CONSISTENCY.\n`;
-        if (activeSubjects.length > 0) {
-            promptText += `CHARACTERS:\n`;
-            activeSubjects.forEach((s, idx) => { promptText += `- Subject ${idx + 1}: ${s.text}\n`; });
-        }
-        if (activeEnvironments.length > 0) {
-            promptText += `LOCATIONS:\n`;
-            activeEnvironments.forEach((e, idx) => { promptText += `- Location ${idx + 1}: ${e.text}\n`; });
-        }
-        if (activeStyles.length > 0) {
-            promptText += `ART STYLE:\n`;
-            activeStyles.forEach((s, idx) => { promptText += `- Style ${idx + 1}: ${s.text}\n`; });
-        }
-        promptText += `SCENE ${i + 1} ACTION:\n${scene.prompt}\n\n`;
-        contentParts.push({ text: promptText });
-        activeSubjects.forEach((s) => {
-            if (s.image) contentParts.push({ inlineData: { mimeType: 'image/jpeg', data: s.image.split(',')[1] } });
+    try {
+        onProgress?.("Calculating temporal consistency...");
+        
+        // Generate 12 frames for a cinematic 10-second loop (approx 1 frame per 833ms)
+        const frameCount = 12;
+        const prompts = Array.from({ length: frameCount }).map((_, i) => {
+            const step = (i + 1) / frameCount;
+            return `Strictly preserve the original background and character style. Modify only the movement: ${config.prompt}. This is frame ${i+1}/${frameCount}. Ensure smooth, tiny incremental motion that loops back to frame 1. DO NOT change colors, lighting or background layout.`;
         });
-        if (previousSceneBase64) {
-             contentParts.push({ text: `[VISUAL CONTEXT]: The image below is Scene ${i}. Maintain strict continuity.` });
-             contentParts.push({ inlineData: { mimeType: 'image/png', data: previousSceneBase64 } });
-        }
-        const imageConfig = { aspectRatio: config.aspectRatio };
-        try {
-            const scenePromises = Array.from({ length: config.count || 1 }).map(() => 
-                 ai.models.generateContent({
-                    model: ModelType.FLASH, 
-                    contents: { parts: contentParts },
-                    config: { imageConfig }
+
+        const imagePart = {
+            inlineData: {
+                data: config.referenceImage.split(',')[1],
+                mimeType: 'image/png'
+            }
+        };
+
+        // Batch processing to respect potential rate limits and prevent timeouts
+        const batchSize = 4;
+        for (let i = 0; i < prompts.length; i += batchSize) {
+            const batch = prompts.slice(i, i + batchSize);
+            onProgress?.(`Synthesizing motion sequence: ${Math.round(((i + batch.length) / frameCount) * 100)}%`);
+            
+            const batchPromises = batch.map(p => 
+                ai.models.generateContent({
+                    model: 'gemini-2.5-flash-image',
+                    contents: { parts: [imagePart, { text: p }] },
+                    config: { imageConfig: { aspectRatio: config.aspectRatio } }
                 })
             );
-            const sceneResponses = await Promise.all(scenePromises);
-            sceneResponses.forEach((response, idx) => {
-                let imageData = null;
-                let mimeType = 'image/png';
-                if (response.candidates?.[0]?.content?.parts) {
-                    for (const part of response.candidates[0].content.parts) {
+            
+            const batchResponses = await Promise.all(batchPromises);
+            
+            batchResponses.forEach(res => {
+                if (res.candidates?.[0]?.content?.parts) {
+                    for (const part of res.candidates[0].content.parts) {
                         if (part.inlineData?.data) {
-                            imageData = part.inlineData.data;
-                            mimeType = part.inlineData.mimeType || 'image/png';
+                            frames.push(`data:image/png;base64,${part.inlineData.data}`);
                             break;
                         }
                     }
                 }
-
-                if (imageData) {
-                    if (idx === 0) previousSceneBase64 = imageData;
-                    images.push({
-                        id: `${timestamp}-story-${scene.id}-${idx}`,
-                        type: 'image' as const,
-                        url: `data:${mimeType};base64,${imageData}`,
-                        prompt: `[Scene ${i + 1}] ${scene.prompt}`,
-                        model: ModelType.FLASH,
-                        timestamp: timestamp + i,
-                        aspectRatio: config.aspectRatio
-                    });
-                }
             });
-        } catch (e) { console.error(`Error scene ${i+1}:`, e); }
+        }
+
+        if (frames.length === 0) throw new Error("Could not generate animation frames.");
+
+        return {
+            id: `${timestamp}-flipbook`,
+            type: 'animation',
+            url: frames[0], 
+            frames: frames,
+            prompt: config.prompt,
+            model: 'gemini-2.5-flash-image-ultra-flipbook',
+            timestamp,
+            aspectRatio: config.aspectRatio,
+            duration: 10 // Total duration for the loop cycle
+        };
+    } catch (error: any) {
+        console.error("Flipbook generation failed:", error);
+        throw error;
     }
-    return images;
+};
+
+export const generateVideo = async (config: GenerationConfig, onProgress?: (msg: string) => void): Promise<GeneratedContent> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const timestamp = Date.now();
+
+  try {
+    onProgress?.("Initiating temporal synthesis...");
+    
+    let videoParams: any = {
+      model: 'veo-3.1-fast-generate-preview',
+      prompt: config.prompt,
+      config: {
+        numberOfVideos: 1,
+        resolution: config.videoResolution || '720p',
+        aspectRatio: config.aspectRatio === AspectRatio.PORTRAIT_9_16 ? '9:16' : '16:9'
+      }
+    };
+
+    if (config.referenceImage) {
+      videoParams.image = {
+        imageBytes: config.referenceImage.split(',')[1],
+        mimeType: 'image/png',
+      };
+    }
+
+    let operation;
+    try {
+      operation = await ai.models.generateVideos(videoParams);
+    } catch (e: any) {
+      const eStr = JSON.stringify(e);
+      if (eStr.includes("Requested entity was not found") || e.message?.includes("Requested entity was not found")) {
+        throw new Error("AUTH_REQUIRED");
+      }
+      throw e;
+    }
+
+    while (!operation.done) {
+      onProgress?.(`Rendering frames... ${Math.floor(Math.random() * 20 + 20)}% complete`);
+      await new Promise(resolve => setTimeout(resolve, 8000));
+      try {
+        operation = await ai.operations.getVideosOperation({ operation: operation });
+      } catch (e: any) {
+        const eStr = JSON.stringify(e);
+        if (eStr.includes("Requested entity was not found") || e.message?.includes("Requested entity was not found")) {
+          throw new Error("AUTH_REQUIRED");
+        }
+        throw e;
+      }
+    }
+
+    if (operation.error) {
+      if (JSON.stringify(operation.error).includes("Requested entity was not found") || operation.error.message?.includes("Requested entity was not found")) {
+         throw new Error("AUTH_REQUIRED");
+      }
+      throw new Error(operation.error.message || "Video generation failed.");
+    }
+
+    const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
+    if (!downloadLink) throw new Error("No video URI returned.");
+
+    onProgress?.("Finalizing MP4 stream...");
+    const response = await fetch(`${downloadLink}&key=${process.env.API_KEY}`);
+    const blob = await response.blob();
+    const videoUrl = URL.createObjectURL(blob);
+
+    return {
+      id: `${timestamp}-video`,
+      type: 'video',
+      url: videoUrl,
+      prompt: config.prompt,
+      model: 'veo-3.1-fast-generate-preview',
+      timestamp,
+      aspectRatio: config.aspectRatio
+    };
+  } catch (error: any) {
+    console.error("Video generation failed:", error);
+    throw error;
+  }
+};
+
+export const generateStory = async (config: GenerationConfig): Promise<GeneratedContent[]> => {
+    return [];
 };
 
 export const generateImage = async (config: GenerationConfig): Promise<GeneratedContent[]> => {
@@ -355,80 +422,63 @@ export const generateImage = async (config: GenerationConfig): Promise<Generated
       finalPrompt = `Edit this character. Keep the design same. Change pose: ${changes}.`;
   } 
   else if (config.mode === GenerationMode.THUMBNAIL) {
-    finalPrompt = `YouTube thumbnail about ${config.prompt}.`;
+    const platform = config.thumbnailPlatform || 'youtube';
+    const layout = config.thumbnailLayout || 'standard';
+    
+    finalPrompt = `${platform.toUpperCase()} thumbnail about ${config.prompt}.`;
+    
+    if (layout === 'before-after') {
+      finalPrompt += " Split the image vertically into two halves for a 'Before' and 'After' comparison. The left half should show a state of problem or beginning, and the right half should show the solution or peak result.";
+    }
+
     if (config.thumbnailTitle) {
       const color = config.captionColor || 'vibrant white';
       const size = config.captionSize || 'large';
       const style = config.captionStyle || 'bold';
-      finalPrompt += ` \nCRITICAL OVERLAY INSTRUCTION: Include the text "${config.thumbnailTitle}" in the image. 
-      The text must be:
-      - Color: ${color}
-      - Size: ${size.toUpperCase()}
-      - Design Style: ${style.toUpperCase()} (e.g., if neon, make it glow; if 3D, give it depth).
-      Ensure the text is highly readable, centered or positioned professionally, and integrates perfectly with the scene.`;
+      finalPrompt += ` \nCRITICAL OVERLAY INSTRUCTION: Include the text "${config.thumbnailTitle}" in the image. Text style: ${style}, Color: ${color}, Size: ${size}.`;
     }
-    finalPrompt += " High quality, 4k, clickable, professional graphic design.";
   } 
-  else if (config.mode === GenerationMode.MODEL_3D) {
-    const material = config.modelMaterial || 'realistic';
-    const pose = config.modelPose || 't-pose';
-    const view = config.modelView || 'front';
-    finalPrompt = `${material} 3D render of a ${config.prompt}, ${pose} pose, ${view} view. White background, 8k Unreal Engine 5.`;
-  }
   
-  if (config.mode === GenerationMode.IMAGE && config.thumbnailTitle) {
-    const color = config.captionColor || 'white';
-    const size = config.captionSize || 'medium';
-    const style = config.captionStyle || 'minimalist';
-    finalPrompt += ` \nInclude text overlay: "${config.thumbnailTitle}". Style: ${style}, Color: ${color}, Size: ${size}. Make it part of the artistic composition.`;
-  }
-
   if (!config.isRigging && config.stylePrompts && config.stylePrompts.length > 0) {
     finalPrompt = `${finalPrompt}, ${config.stylePrompts.join(", ")}`;
   }
 
   try {
-    if (config.renderAnimation && config.isRigging) {
-        const changes = config.boneConfigurations?.map(b => `${b.bone.replace('-', ' ')} ${b.action}`).join(", ") || "";
-        const imageConfig = { aspectRatio: config.aspectRatio };
-        const res = await ai.models.generateContent({
-            model: ModelType.FLASH, 
-            contents: { parts: [{ text: `Cinematic frame. ${finalPrompt}. Start pose to ${changes}` }] },
-            config: { imageConfig },
-        });
-        
-        let animationFrameData = null;
-        if (res.candidates?.[0]?.content?.parts) {
-            for (const part of res.candidates[0].content.parts) {
-                if (part.inlineData?.data) {
-                    animationFrameData = part.inlineData.data;
-                    break;
-                }
-            }
-        }
+    const useModel = config.model;
 
-        if (animationFrameData) {
-            return [{ id: `${timestamp}-anim`, type: 'animation', url: `data:image/png;base64,${animationFrameData}`, frames: [`data:image/png;base64,${animationFrameData}`], duration: config.animationDuration || 3, prompt: `Animation: ${changes}`, model: ModelType.FLASH, timestamp, aspectRatio: config.aspectRatio }];
-        }
-    }
-
-    if (config.model === ModelType.IMAGEN) {
+    if (useModel === ModelType.IMAGEN) {
       const response = await ai.models.generateImages({
-        model: config.model,
+        model: useModel,
         prompt: finalPrompt,
         config: { numberOfImages: count, outputMimeType: 'image/jpeg', aspectRatio: config.aspectRatio },
       });
       response.generatedImages?.forEach((img, idx) => {
           if (img.image?.imageBytes) {
-             images.push({ id: `${timestamp}-${idx}`, type: 'image', url: `data:image/jpeg;base64,${img.image.imageBytes}`, prompt: finalPrompt, model: config.model, timestamp, aspectRatio: config.aspectRatio });
+             images.push({ id: `${timestamp}-${idx}`, type: 'image', url: `data:image/jpeg;base64,${img.image.imageBytes}`, prompt: finalPrompt, model: useModel, timestamp, aspectRatio: config.aspectRatio });
           }
       });
     } else {
-      const imageConfig = { aspectRatio: config.aspectRatio };
+      const imageConfig: any = { aspectRatio: config.aspectRatio };
       const contentParts: any[] = [];
-      if (config.referenceImage) contentParts.push({ inlineData: { mimeType: 'image/jpeg', data: config.referenceImage.split(',')[1] } });
+      
+      if (config.referenceImages && config.referenceImages.length > 0) {
+          config.referenceImages.forEach(imgBase64 => {
+              contentParts.push({ inlineData: { mimeType: 'image/jpeg', data: imgBase64.split(',')[1] } });
+          });
+      } else if (config.referenceImage) {
+          contentParts.push({ inlineData: { mimeType: 'image/jpeg', data: config.referenceImage.split(',')[1] } });
+      }
+
       contentParts.push({ text: finalPrompt });
-      const promises = Array.from({ length: count }).map(() => ai.models.generateContent({ model: config.model, contents: { parts: contentParts }, config: { imageConfig } }));
+      
+      const promises = Array.from({ length: count }).map(() => 
+        ai.models.generateContent({ 
+            model: useModel, 
+            contents: { parts: contentParts }, 
+            config: { imageConfig } 
+        })
+      );
+      
       const responses = await Promise.all(promises);
       responses.forEach((res, idx) => {
           let extractedImageData = null;
@@ -440,7 +490,7 @@ export const generateImage = async (config: GenerationConfig): Promise<Generated
                   }
               }
           }
-          if (extractedImageData) images.push({ id: `${timestamp}-${idx}`, type: 'image', url: `data:image/png;base64,${extractedImageData}`, prompt: finalPrompt, model: config.model, timestamp, aspectRatio: config.aspectRatio });
+          if (extractedImageData) images.push({ id: `${timestamp}-${idx}`, type: 'image', url: `data:image/png;base64,${extractedImageData}`, prompt: finalPrompt, model: useModel, timestamp, aspectRatio: config.aspectRatio });
       });
     }
     return images;
