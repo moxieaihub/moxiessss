@@ -1,11 +1,10 @@
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { GenerationConfig, CaptionSegment, ModelType, GenerationMode, CaptionAnimation } from '../types';
+import { GenerationConfig, CaptionSegment, ModelType, GenerationMode, CaptionAnimation, AspectRatio } from '../types';
 import { 
   Upload, X, Mic, FileVideo, Check, Play, Pause, Download, 
   Sparkles, Loader2, MessageSquare, Volume2, Settings, Palette, 
   Trash2, Plus, Zap, ChevronRight, Layout, ImageIcon, Clock, Minus,
-  TypeIcon, Wand2, Zap as MotionIcon
+  TypeIcon, Wand2
 } from './Icons';
 import { GoogleGenAI, Type } from "@google/genai";
 
@@ -70,11 +69,9 @@ const CaptionStudio: React.FC<CaptionStudioProps> = ({ config, setConfig, onExit
   const [activeSegmentIndex, setActiveSegmentIndex] = useState(0);
   const [videoDuration, setVideoDuration] = useState(0);
   
-  const audioInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const videoPlayerRef = useRef<HTMLVideoElement>(null);
 
-  // Synchronize internal segments with parent config for persistence
   useEffect(() => {
     setConfig(prev => ({ ...prev, captionSegments: segments, captionScript: script }));
   }, [segments, script, setConfig]);
@@ -82,7 +79,7 @@ const CaptionStudio: React.FC<CaptionStudioProps> = ({ config, setConfig, onExit
   const getSupportedMimeType = () => {
     const types = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4;codecs=h264', 'video/mp4'];
     for (const type of types) if (MediaRecorder.isTypeSupported(type)) return type;
-    return '';
+    return 'video/webm';
   };
 
   const handleTimeUpdate = useCallback(() => {
@@ -182,7 +179,7 @@ const CaptionStudio: React.FC<CaptionStudioProps> = ({ config, setConfig, onExit
           { 
             parts: [ 
               { inlineData: { mimeType: 'audio/wav', data: base64Audio } }, 
-              { text: "Analyze this audio. Transcribe the speech into a series of short, engaging caption segments. Provide highly accurate start and end timestamps. Format the response ONLY as a JSON array of objects with 'text', 'startTime' (seconds), and 'endTime' (seconds)." } 
+              { text: "Analyze this audio. Transcribe speech into segments. Format: JSON array of {'text', 'startTime', 'endTime'}." } 
             ] 
           }
         ],
@@ -203,14 +200,7 @@ const CaptionStudio: React.FC<CaptionStudioProps> = ({ config, setConfig, onExit
         }
       });
       
-      // Sanitizing response to ensure only JSON remains (stripping markdown)
       let rawText = response.text || "[]";
-      if (rawText.includes("```json")) {
-        rawText = rawText.split("```json")[1].split("```")[0];
-      } else if (rawText.includes("```")) {
-        rawText = rawText.split("```")[1].split("```")[0];
-      }
-
       const data = JSON.parse(rawText.trim());
       const formatted = data.map((item: any, i: number) => ({
         id: `seg-${Date.now()}-${i}`,
@@ -227,7 +217,7 @@ const CaptionStudio: React.FC<CaptionStudioProps> = ({ config, setConfig, onExit
       setTimeout(() => setStatusMessage(""), 3000);
     } catch (err) {
       console.error(err);
-      alert("Failed to auto-caption. Check console for details.");
+      alert("Failed to auto-caption.");
     } finally {
       setIsSyncing(false);
     }
@@ -243,112 +233,48 @@ const CaptionStudio: React.FC<CaptionStudioProps> = ({ config, setConfig, onExit
     }));
   };
 
-  const renderCaptionsToCanvas = (ctx: CanvasRenderingContext2D, segment: CaptionSegment, currentTime: number, canvasWidth: number, canvasHeight: number) => {
-    const text = segment.text;
-    const animation = segment.animation || config.defaultCaptionAnimation || 'none';
-    const segmentDuration = segment.endTime - segment.startTime;
-    const progress = (currentTime - segment.startTime) / (segmentDuration || 1);
-    
-    const size = config.captionSize || 'large';
-    const colorVal = config.captionColor || 'Pure White';
-    const style = config.captionStyle || 'bold';
-    const position = config.captionPosition || 'bottom';
-    const font = config.captionFont || 'Inter';
-    
-    let fontSize = canvasHeight * 0.08;
-    if (size === 'small') fontSize = canvasHeight * 0.04;
-    else if (size === 'medium') fontSize = canvasHeight * 0.06;
-    else if (size === 'xl') fontSize = canvasHeight * 0.12;
-    
-    ctx.save();
-    
-    let opacity = 1;
-    let scale = 1;
-    let offsetY = 0;
-    let displayText = text;
-
-    const entryTime = 0.25;
-    const entryProgress = Math.min(1, (currentTime - segment.startTime) / entryTime);
-
-    if (animation === 'fade') {
-      opacity = entryProgress;
-    } else if (animation === 'pop') {
-      opacity = entryProgress;
-      scale = 0.5 + (entryProgress * 0.5);
-      if (entryProgress > 0.8) scale = 1.05;
-      if (entryProgress >= 1) scale = 1;
-    } else if (animation === 'slide-up') {
-      opacity = entryProgress;
-      offsetY = (1 - entryProgress) * 40;
-    } else if (animation === 'zoom-in') {
-      opacity = entryProgress;
-      scale = 1 + (0.2 * (1 - entryProgress));
-    } else if (animation === 'typewriter') {
-      const charLimit = Math.floor(text.length * entryProgress * 4);
-      displayText = text.substring(0, charLimit);
-    }
-
-    ctx.globalAlpha = opacity;
-    ctx.font = `900 ${fontSize}px "${font}", sans-serif`;
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    
-    const maxWidth = canvasWidth * 0.9;
-    const words = displayText.split(' ');
-    let line = ''; const lines = [];
-    for(let n = 0; n < words.length; n++) {
-      let testLine = line + words[n] + ' ';
-      if (ctx.measureText(testLine).width > maxWidth && n > 0) { lines.push(line); line = words[n] + ' '; }
-      else line = testLine;
-    }
-    lines.push(line);
-    
-    let startY = canvasHeight / 2;
-    if (position === 'top') startY = canvasHeight * 0.2;
-    else if (position === 'bottom') startY = canvasHeight * 0.8;
-    
-    startY += offsetY;
-    const lineHeight = fontSize * 1.1;
-    let currentY = startY - ((lines.length - 1) * lineHeight / 2);
-    
-    lines.forEach(lineText => {
-      ctx.save();
-      ctx.translate(canvasWidth / 2, currentY);
-      ctx.scale(scale, scale);
-      ctx.translate(-canvasWidth / 2, -currentY);
-
-      const colorObj = CAPTION_COLORS.find(c => c.value === colorVal);
-      if (colorObj?.hex.startsWith('gradient')) {
-        const gradient = ctx.createLinearGradient(0, currentY - fontSize/2, canvasWidth, currentY + fontSize/2);
-        if (colorObj.hex === 'gradient-sunset') { gradient.addColorStop(0, '#fb923c'); gradient.addColorStop(1, '#dc2626'); }
-        else if (colorObj.hex === 'gradient-ocean') { gradient.addColorStop(0, '#22d3ee'); gradient.addColorStop(1, '#2563eb'); }
-        else if (colorObj.hex === 'gradient-cyber') { gradient.addColorStop(0, '#a855f7'); gradient.addColorStop(1, '#ec4899'); }
-        ctx.fillStyle = gradient;
-      } else ctx.fillStyle = colorObj?.hex || '#ffffff';
-      
-      if (style === 'outline') {
-        ctx.strokeStyle = '#000000';
-        ctx.lineWidth = fontSize * 0.15;
-        ctx.strokeText(lineText.trim(), canvasWidth / 2, currentY);
-      } else if (style === 'neon') {
-        ctx.shadowBlur = 15;
-        ctx.shadowColor = ctx.fillStyle as string;
-      } else if (style === '3d') {
-        ctx.shadowColor = 'rgba(0,0,0,0.5)';
-        ctx.shadowOffsetX = 4;
-        ctx.shadowOffsetY = 4;
-      }
-      
-      ctx.fillText(lineText.trim(), canvasWidth / 2, currentY); 
-      ctx.restore(); 
-      currentY += lineHeight;
-    });
-    ctx.restore();
+  const formatSRTTime = (seconds: number) => {
+    const date = new Date(0);
+    date.setSeconds(Math.floor(seconds));
+    const hh = date.getUTCHours().toString().padStart(2, '0');
+    const mm = date.getUTCMinutes().toString().padStart(2, '0');
+    const ss = date.getUTCSeconds().toString().padStart(2, '0');
+    const ms = Math.floor((seconds % 1) * 1000).toString().padStart(3, '0');
+    return `${hh}:${mm}:${ss},${ms}`;
   };
 
-  const handleExportVideo = async () => {
-    if (!videoPlayerRef.current || !videoUrl) return;
+  const handleDownloadSRT = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (segments.length === 0) return;
+
+    const srtContent = segments.map((seg, i) => {
+      const index = i + 1;
+      const start = formatSRTTime(seg.startTime);
+      const end = formatSRTTime(seg.endTime);
+      return `${index}\n${start} --> ${end}\n${seg.text}\n`;
+    }).join('\n');
+
+    const blob = new Blob([srtContent], { type: 'text/srt' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = url;
+    a.download = `lumina-captions-${Date.now()}.srt`;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }, 100);
+  };
+
+  const handleExportVideo = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!videoPlayerRef.current || !videoUrl || isExporting) return;
+    
     setIsExporting(true);
     setExportProgress(0);
+    
     const video = videoPlayerRef.current;
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
@@ -356,193 +282,124 @@ const CaptionStudio: React.FC<CaptionStudioProps> = ({ config, setConfig, onExit
     
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
-    const wasLooping = video.loop;
-    video.loop = false;
     
     const mimeType = getSupportedMimeType();
-    const canvasStream = canvas.captureStream(30);
-    // @ts-ignore
-    const videoStream = video.captureStream ? video.captureStream() : (video as any).mozCaptureStream ? (video as any).mozCaptureStream() : null;
-    
-    const combinedTracks = [...canvasStream.getTracks()];
-    if (videoStream && videoStream.getAudioTracks().length > 0) {
-        combinedTracks.push(videoStream.getAudioTracks()[0]);
-    }
-    
-    const recorder = new MediaRecorder(new MediaStream(combinedTracks), { 
-        mimeType, 
-        videoBitsPerSecond: 10000000 
-    });
-    
+    const stream = canvas.captureStream(30);
+    const recorder = new MediaRecorder(stream, { mimeType });
     const chunks: Blob[] = [];
-    recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+    
+    recorder.ondataavailable = (ev) => { if (ev.data.size > 0) chunks.push(ev.data); };
     recorder.onstop = () => {
-        const blob = new Blob(chunks, { type: recorder.mimeType });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `captioned-master-${Date.now()}.webm`;
-        a.click();
-        video.loop = wasLooping;
-        video.muted = false;
-        setIsExporting(false);
+      const blob = new Blob(chunks, { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `lumina-export-${Date.now()}.webm`;
+      a.click();
+      setIsExporting(false);
     };
 
     video.currentTime = 0;
-    video.muted = false;
     recorder.start();
     video.play();
-    
+
     const drawLoop = () => {
-        if (video.ended || video.currentTime >= video.duration - 0.05) {
-            if (recorder.state !== 'inactive') recorder.stop();
-            return;
-        }
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const currentTime = video.currentTime;
-        const currentSeg = segments.find(s => currentTime >= s.startTime && currentTime <= s.endTime);
-        if (currentSeg) renderCaptionsToCanvas(ctx, currentSeg, currentTime, canvas.width, canvas.height);
-        setExportProgress((video.currentTime / video.duration) * 100);
-        if (recorder.state === 'recording') {
-            requestAnimationFrame(drawLoop);
-        }
+      if (!isExporting || video.ended) {
+        if (recorder.state === 'recording') recorder.stop();
+        return;
+      }
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const currentTime = video.currentTime;
+      const currentSeg = segments.find(s => currentTime >= s.startTime && currentTime <= s.endTime);
+      if (currentSeg) {
+        renderCaptionsToCanvas(ctx, currentSeg, currentTime, canvas.width, canvas.height);
+      }
+      setExportProgress((currentTime / video.duration) * 100);
+      requestAnimationFrame(drawLoop);
     };
     drawLoop();
   };
 
-  const getCaptionContainerClasses = () => {
+  const renderCaptionsToCanvas = (ctx: CanvasRenderingContext2D, segment: CaptionSegment, currentTime: number, canvasWidth: number, canvasHeight: number) => {
+    const text = segment.text;
+    const font = config.captionFont || 'Inter';
+    const color = CAPTION_COLORS.find(c => c.value === (config.captionColor || 'Pure White'))?.hex || '#ffffff';
+    const size = config.captionSize === 'small' ? 24 : config.captionSize === 'medium' ? 36 : config.captionSize === 'xl' ? 64 : 48;
     const pos = config.captionPosition || 'bottom';
-    let classes = "absolute inset-0 flex p-10 pointer-events-none z-10 transition-all duration-300 ";
-    if (pos === 'top') classes += "items-start pt-24 justify-center";
-    else if (pos === 'center') classes += "items-center justify-center";
-    else classes += "items-end pb-32 justify-center";
-    return classes;
+    
+    ctx.font = `bold ${size}px ${font}`;
+    ctx.fillStyle = color;
+    ctx.textAlign = 'center';
+    
+    const x = canvasWidth / 2;
+    let y = canvasHeight * 0.8;
+    if (pos === 'top') y = canvasHeight * 0.2;
+    if (pos === 'center') y = canvasHeight * 0.5;
+
+    ctx.fillText(text, x, y);
   };
 
-  const getCaptionStyles = () => {
-      const colorVal = config.captionColor || 'Pure White';
-      const size = config.captionSize || 'large';
-      const style = config.captionStyle || 'bold';
-      const font = config.captionFont || 'Inter';
-      const colorObj = CAPTION_COLORS.find(c => c.value === colorVal);
-      
-      let classes = `transition-all duration-300 font-black tracking-tight drop-shadow-2xl text-center px-6 max-w-[90%] leading-[1.1] `;
-      
-      if (size === 'small') classes += "text-xl ";
-      else if (size === 'medium') classes += "text-3xl ";
-      else if (size === 'large') classes += "text-5xl ";
-      else if (size === 'xl') classes += "text-7xl ";
-      
-      if (style === 'outline') classes += "style-outline ";
-      else if (style === 'neon') classes += "style-neon ";
-      else if (style === '3d') classes += "style-3d ";
-      else if (style === 'minimalist') classes += "font-medium italic tracking-normal opacity-90 ";
-      
-      const activeSeg = segments[activeSegmentIndex];
-      const anim = activeSeg?.animation || config.defaultCaptionAnimation || 'none';
-      if (anim !== 'none') classes += `anim-${anim} `;
-
-      const inlineStyle: React.CSSProperties = { fontFamily: `'${font}', sans-serif` };
-      if (colorObj?.hex.startsWith('gradient')) {
-          classes += "bg-clip-text text-transparent ";
-          if (colorObj.hex === 'gradient-sunset') classes += "bg-gradient-to-r from-orange-400 to-red-600 ";
-          else if (colorObj.hex === 'gradient-ocean') classes += "bg-gradient-to-r from-cyan-400 to-blue-600 ";
-          else if (colorObj.hex === 'gradient-cyber') classes += "bg-gradient-to-r from-purple-500 to-pink-500 ";
-      } else inlineStyle.color = colorObj?.hex || '#ffffff';
-      
-      return { classes, inlineStyle };
+  const handleClearAll = () => {
+    if (confirm("Clear all caption segments?")) {
+      setSegments([]);
+    }
   };
-
-  const { classes: captionClasses, inlineStyle: captionInlineStyle } = getCaptionStyles();
 
   return (
     <div className="flex flex-col h-full bg-[#09090b] text-zinc-300 overflow-hidden relative">
-      {isExporting && (
-        <div className="absolute inset-0 z-[100] bg-black/95 backdrop-blur-3xl flex flex-col items-center justify-center p-10 text-center">
-            <div className="relative mb-8">
-                 <div className="w-32 h-32 rounded-full border-4 border-indigo-500/20 border-t-indigo-500 animate-spin" />
-                 <div className="absolute inset-0 flex items-center justify-center font-black text-white text-xl">{Math.round(exportProgress)}%</div>
-            </div>
-            <h2 className="text-3xl font-black text-white mb-3 tracking-tight">Finalizing Master</h2>
-            <p className="text-zinc-500 text-sm max-w-sm">Merging visual overrides and merging audio tracks. Please do not close this window.</p>
-        </div>
-      )}
-
-      {/* Top Navbar */}
       <div className="h-16 border-b border-zinc-800 bg-zinc-950 flex items-center justify-between px-6 shrink-0 z-50">
         <div className="flex items-center gap-3">
             <div className="bg-indigo-600 p-2 rounded-xl text-white shadow-xl shadow-indigo-500/10"><MessageSquare className="w-5 h-5" /></div>
             <div>
                 <h1 className="font-bold text-sm lg:text-base text-white">Master <span className="text-indigo-500">Studio</span></h1>
-                <p className="text-[10px] text-zinc-600 uppercase font-black tracking-widest">{statusMessage || "Workspace Active"}</p>
+                <p className="text-[10px] text-zinc-600 uppercase font-black tracking-widest">{statusMessage || "Studio Active"}</p>
             </div>
         </div>
         <div className="flex items-center gap-3">
-            <button onClick={onExit} className="px-5 py-2.5 text-xs font-bold text-zinc-500 hover:text-white transition-colors bg-zinc-900 rounded-xl border border-zinc-800">Discard</button>
-            <button 
-                onClick={handleExportVideo}
-                disabled={segments.length === 0 || !videoUrl || isExporting}
-                className="flex items-center gap-2 px-6 py-3 rounded-2xl font-black text-xs transition-all bg-indigo-600 text-white hover:bg-indigo-500 shadow-xl disabled:bg-zinc-800 disabled:text-zinc-600"
-            >
-                <Download className="w-4 h-4" /> Render & Export
+            <button onClick={handleDownloadSRT} disabled={segments.length === 0} className="px-4 py-2 text-[10px] font-black uppercase text-zinc-300 hover:text-white transition-colors bg-zinc-800 rounded-xl border border-zinc-700 disabled:opacity-50">Download SRT</button>
+            <button onClick={onExit} className="px-4 py-2 text-[10px] font-black uppercase text-zinc-500 hover:text-white transition-colors bg-zinc-900 rounded-xl border border-zinc-800">Exit</button>
+            <button onClick={handleExportVideo} disabled={!videoUrl || isExporting} className="flex items-center gap-2 px-6 py-3 rounded-2xl font-black text-[10px] uppercase transition-all bg-indigo-600 text-white hover:bg-indigo-500 shadow-xl disabled:bg-zinc-800 disabled:text-zinc-600">
+                {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} Export
             </button>
         </div>
       </div>
 
       <div className="flex-1 flex overflow-hidden">
-        {/* Left Control Column */}
-        <div className="w-80 lg:w-96 border-r border-zinc-800 flex flex-col bg-zinc-950/40 shadow-2xl z-20">
+        <div className="w-80 lg:w-96 border-r border-zinc-800 flex flex-col bg-zinc-950/40">
             <div className="flex border-b border-zinc-800">
-                <button onClick={() => setActiveTab('setup')} className={`flex-1 py-4 text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${activeTab === 'setup' ? 'text-white border-b-2 border-indigo-500 bg-indigo-500/5' : 'text-zinc-500 hover:text-zinc-300'}`}><Settings className="w-3 h-3"/> Setup</button>
-                <button onClick={() => setActiveTab('style')} className={`flex-1 py-4 text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${activeTab === 'style' ? 'text-white border-b-2 border-indigo-500 bg-indigo-500/5' : 'text-zinc-500 hover:text-zinc-300'}`}><Palette className="w-3 h-3"/> Layout & Style</button>
+                <button onClick={() => setActiveTab('setup')} className={`flex-1 py-4 text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${activeTab === 'setup' ? 'text-white border-b-2 border-indigo-500 bg-indigo-500/5' : 'text-zinc-500 hover:text-zinc-300'}`}><Settings className="w-3 h-3"/> Setup</button>
+                <button onClick={() => setActiveTab('style')} className={`flex-1 py-4 text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${activeTab === 'style' ? 'text-white border-b-2 border-indigo-500 bg-indigo-500/5' : 'text-zinc-500 hover:text-zinc-300'}`}><Palette className="w-3 h-3"/> Styling</button>
             </div>
             <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
                 {activeTab === 'setup' ? (
                     <div className="space-y-8">
                         <div className="space-y-4">
-                            <label className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Target Asset</label>
+                            <label className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Base Asset</label>
                             <div onClick={() => videoInputRef.current?.click()} className={`aspect-video border-2 border-dashed rounded-3xl cursor-pointer flex flex-col items-center justify-center gap-4 transition-all relative overflow-hidden group ${videoUrl ? 'border-indigo-500/50 bg-indigo-500/5' : 'border-zinc-800 hover:border-indigo-500/50 bg-zinc-900/50'}`}>
-                                {videoUrl ? (<><Check className="w-8 h-8 text-indigo-500" /><span className="text-xs font-bold text-zinc-400">Media Loaded</span></>) : (<><div className="w-12 h-12 bg-zinc-800 rounded-full flex items-center justify-center"><FileVideo className="w-6 h-6 text-zinc-400" /></div><span className="text-xs font-bold text-zinc-500 uppercase tracking-tighter">Click to Upload</span></>)}
+                                {videoUrl ? (<><Check className="w-8 h-8 text-indigo-500" /><span className="text-xs font-bold text-zinc-400">Source Ready</span></>) : (<><FileVideo className="w-10 h-10 text-zinc-700" /><span className="text-[10px] font-black uppercase text-zinc-600">Click to Upload</span></>)}
                                 <input ref={videoInputRef} type="file" accept="video/*" className="hidden" onChange={handleVideoUpload} />
                             </div>
                         </div>
                         {videoUrl && (
-                            <div className="p-5 bg-gradient-to-br from-indigo-600/10 to-transparent border border-indigo-500/20 rounded-3xl space-y-4">
-                                <div className="flex items-center gap-2 text-indigo-400">
-                                    <Sparkles className="w-4 h-4 fill-current"/>
-                                    <h3 className="text-[10px] font-black uppercase tracking-widest">AI Master Engine</h3>
-                                </div>
-                                <button onClick={() => { if (videoInputRef.current?.files?.[0]) handleAutoCaption(videoInputRef.current.files[0]); }} disabled={isSyncing} className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-3 transition-all shadow-lg shadow-indigo-600/20 active:scale-95">
-                                    {isSyncing ? <Loader2 className="w-4 h-4 animate-spin"/> : <Wand2 className="w-4 h-4"/>} {isSyncing ? "Analyzing..." : "Auto-Transcribe Scene"}
-                                </button>
-                                <p className="text-[10px] text-zinc-600 leading-relaxed text-center italic">Uses Gemini Flash 3 to analyze audio patterns and sync timestamps precisely.</p>
-                            </div>
+                          <div className="space-y-3">
+                            <button onClick={() => { if (videoInputRef.current?.files?.[0]) handleAutoCaption(videoInputRef.current.files[0]); }} disabled={isSyncing} className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-3 transition-all shadow-lg active:scale-95 disabled:bg-zinc-800">
+                                {isSyncing ? <Loader2 className="w-4 h-4 animate-spin"/> : <Sparkles className="w-4 h-4"/>} {isSyncing ? "Analyzing..." : "Auto AI Transcribe"}
+                            </button>
+                            {/* Extra Button Request: Clear All Segments */}
+                            <button onClick={handleClearAll} className="w-full py-4 bg-zinc-900 hover:bg-zinc-800 text-zinc-500 border border-zinc-800 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-3 transition-all">
+                                <Trash2 className="w-4 h-4"/> Clear All Segments
+                            </button>
+                          </div>
                         )}
-                        <div className="space-y-4">
-                            <div className="flex items-center justify-between">
-                                <span className="text-[10px] text-zinc-600 uppercase font-black tracking-widest">Global Motion</span>
-                                <span className="text-[9px] bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded-full border border-zinc-700">Per Caption</span>
-                            </div>
-                            <select 
-                                value={config.defaultCaptionAnimation || 'none'} 
-                                onChange={(e) => setConfig(prev => ({...prev, defaultCaptionAnimation: e.target.value as CaptionAnimation}))} 
-                                className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl py-3 px-4 text-xs text-white focus:outline-none focus:border-indigo-500 transition-colors"
-                            >
-                                {ANIMATIONS.map(a => <option key={a.id} value={a.id}>{a.label}</option>)}
-                            </select>
-                        </div>
                     </div>
                 ) : (
-                    <div className="space-y-8">
-                        <div className="p-6 bg-zinc-900/50 border border-zinc-800 rounded-3xl space-y-6">
-                            <div className="space-y-4">
-                                <div className="space-y-1.5"><span className="text-[10px] text-zinc-500 uppercase font-black tracking-widest">Typography</span><select value={config.captionFont || 'Inter'} onChange={(e) => setConfig(prev => ({...prev, captionFont: e.target.value}))} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-3 px-4 text-xs text-white outline-none focus:border-indigo-500">{CAPTION_FONTS.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></div>
-                                <div className="space-y-1.5"><span className="text-[10px] text-zinc-500 uppercase font-black tracking-widest">Graphic Effect</span><select value={config.captionStyle || 'bold'} onChange={(e) => setConfig(prev => ({...prev, captionStyle: e.target.value as any}))} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-3 px-4 text-xs text-white outline-none focus:border-indigo-500">{CAPTION_STYLES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="space-y-1.5"><span className="text-[10px] text-zinc-500 uppercase font-black tracking-widest">Safe Area</span><select value={config.captionPosition || 'bottom'} onChange={(e) => setConfig(prev => ({...prev, captionPosition: e.target.value as any}))} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-3 px-4 text-xs text-white outline-none focus:border-indigo-500"><option value="top">Header</option><option value="center">Center</option><option value="bottom">Footer</option></select></div>
-                                    <div className="space-y-1.5"><span className="text-[10px] text-zinc-500 uppercase font-black tracking-widest">Scale</span><select value={config.captionSize || 'large'} onChange={(e) => setConfig(prev => ({...prev, captionSize: e.target.value as any}))} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-3 px-4 text-xs text-white outline-none focus:border-indigo-500"><option value="small">S</option><option value="medium">M</option><option value="large">L</option><option value="xl">XL</option></select></div>
-                                </div>
-                                <div className="space-y-3"><span className="text-[10px] text-zinc-500 uppercase font-black tracking-widest block mb-1">Color Theme</span><div className="flex flex-wrap gap-3">{CAPTION_COLORS.map((c) => (<button key={c.name} title={c.value} onClick={() => setConfig(prev => ({...prev, captionColor: c.value}))} className={`w-8 h-8 rounded-full border-2 transition-all transform hover:scale-110 active:scale-90 ${config.captionColor === c.value ? 'border-white scale-110 ring-2 ring-indigo-600' : 'border-zinc-800'} ${c.class} shadow-lg`} />))}</div></div>
+                    <div className="space-y-6">
+                        <div className="space-y-4">
+                            <div className="space-y-1.5"><span className="text-[10px] text-zinc-500 uppercase font-black tracking-widest">Font Family</span><select value={config.captionFont || 'Inter'} onChange={(e) => setConfig(prev => ({...prev, captionFont: e.target.value}))} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-3 px-4 text-xs text-white outline-none focus:border-indigo-500">{CAPTION_FONTS.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}</select></div>
+                            <div className="space-y-1.5"><span className="text-[10px] text-zinc-500 uppercase font-black tracking-widest">Graphics Style</span><select value={config.captionStyle || 'bold'} onChange={(e) => setConfig(prev => ({...prev, captionStyle: e.target.value as any}))} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-3 px-4 text-xs text-white outline-none focus:border-indigo-500">{CAPTION_STYLES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1.5"><span className="text-[10px] text-zinc-500 uppercase font-black tracking-widest">Safe Zone</span><select value={config.captionPosition || 'bottom'} onChange={(e) => setConfig(prev => ({...prev, captionPosition: e.target.value as any}))} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-3 px-4 text-xs text-white outline-none focus:border-indigo-500"><option value="top">Top</option><option value="center">Center</option><option value="bottom">Bottom</option></select></div>
+                                <div className="space-y-1.5"><span className="text-[10px] text-zinc-500 uppercase font-black tracking-widest">Scale</span><select value={config.captionSize || 'large'} onChange={(e) => setConfig(prev => ({...prev, captionSize: e.target.value as any}))} className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-3 px-4 text-xs text-white outline-none focus:border-indigo-500"><option value="small">S</option><option value="medium">M</option><option value="large">L</option><option value="xl">XL</option></select></div>
                             </div>
                         </div>
                     </div>
@@ -550,97 +407,57 @@ const CaptionStudio: React.FC<CaptionStudioProps> = ({ config, setConfig, onExit
             </div>
         </div>
 
-        {/* Viewport Workspace */}
-        <div className="flex-1 bg-zinc-950 flex flex-col relative group">
+        <div className="flex-1 bg-zinc-950 flex flex-col relative">
             <div className="flex-1 flex items-center justify-center p-6 lg:p-10 bg-zinc-900/10">
-                <div className="relative aspect-[9/16] h-[95%] max-h-[720px] bg-zinc-900 rounded-[40px] border-[12px] border-zinc-900 shadow-2xl overflow-hidden flex flex-col ring-1 ring-zinc-800 shadow-[0_0_100px_rgba(0,0,0,0.5)]">
-                    {videoUrl ? (<video ref={videoPlayerRef} src={videoUrl} onTimeUpdate={handleTimeUpdate} onLoadedMetadata={() => setVideoDuration(videoPlayerRef.current?.duration || 0)} className="absolute inset-0 w-full h-full object-cover" playsInline loop controls />) : (<div className="absolute inset-0 flex items-center justify-center text-zinc-800 flex-col gap-6"><FileVideo className="w-16 h-16 opacity-20" /><p className="text-[10px] font-black uppercase tracking-[0.3em]">Awaiting Source Material</p></div>)}
-                    
-                    {/* Live Preview Overlay */}
-                    <div className={getCaptionContainerClasses()}>
-                        <div 
-                          key={`${activeSegmentIndex}-${config.captionFont}-${config.captionSize}`} // Keying to force transition resets on style changes
-                          className={captionClasses} 
-                          style={captionInlineStyle}
-                        >
-                            {segments.length > 0 ? (segments[activeSegmentIndex]?.text || "") : ""}
-                        </div>
+                <div className="relative aspect-[9/16] h-[95%] max-h-[720px] bg-zinc-900 rounded-[40px] border-[10px] border-zinc-900 shadow-2xl overflow-hidden flex flex-col ring-1 ring-zinc-800">
+                    {videoUrl ? (<video ref={videoPlayerRef} src={videoUrl} onTimeUpdate={handleTimeUpdate} onLoadedMetadata={() => setVideoDuration(videoPlayerRef.current?.duration || 0)} className="absolute inset-0 w-full h-full object-cover" playsInline loop controls />) : (<div className="absolute inset-0 flex items-center justify-center text-zinc-800 flex-col gap-4"><FileVideo className="w-12 h-12 opacity-10" /><p className="text-[10px] font-black uppercase tracking-[0.3em]">Awaiting Source</p></div>)}
+                    <div className={`absolute inset-0 flex justify-center pointer-events-none z-10 ${config.captionPosition === 'top' ? 'items-start pt-16' : config.captionPosition === 'center' ? 'items-center' : 'items-end pb-16'}`}>
+                        {segments[activeSegmentIndex] && (
+                          <div className="text-center px-6 max-w-[90%]" style={{ 
+                            fontFamily: config.captionFont, 
+                            color: CAPTION_COLORS.find(c => c.value === (config.captionColor || 'Pure White'))?.hex || '#ffffff',
+                            fontSize: config.captionSize === 'small' ? '1.5rem' : config.captionSize === 'medium' ? '2rem' : config.captionSize === 'xl' ? '4rem' : '3rem',
+                            fontWeight: '900',
+                            textShadow: config.captionStyle === 'outline' ? '2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000' : 'none'
+                          }}>
+                            {segments[activeSegmentIndex].text}
+                          </div>
+                        )}
                     </div>
-                </div>
-            </div>
-            
-            {/* Timeline Control */}
-            <div className="h-32 border-t border-zinc-800 bg-zinc-950 px-10 py-5 flex flex-col gap-4 shrink-0 shadow-[0_-10px_30px_rgba(0,0,0,0.5)]">
-                <div className="flex justify-between items-center">
-                    <div className="flex items-center gap-3">
-                        <Clock className="w-4 h-4 text-zinc-500"/>
-                        <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Active Sequence Timeline</span>
-                    </div>
-                    <span className="text-[10px] font-mono text-indigo-400 bg-indigo-500/10 px-3 py-1 rounded-full border border-indigo-500/30">{videoPlayerRef.current?.currentTime.toFixed(2)}s / {videoDuration.toFixed(2)}s</span>
-                </div>
-                <div className="flex-1 bg-zinc-900 rounded-2xl relative overflow-hidden border border-zinc-800 shadow-inner">
-                    {segments.map((seg, i) => (<div key={seg.id} onClick={() => { setActiveSegmentIndex(i); if (videoPlayerRef.current) videoPlayerRef.current.currentTime = seg.startTime; }} className={`absolute h-full border-r border-black/20 transition-all cursor-pointer ${activeSegmentIndex === i ? 'bg-indigo-600/50 z-10 shadow-[inset_0_0_20px_rgba(0,0,0,0.3)]' : 'bg-indigo-600/10 hover:bg-indigo-600/20'}`} style={{ left: `${(seg.startTime / (videoDuration || 1)) * 100}%`, width: `${((seg.endTime - seg.startTime) / (videoDuration || 1)) * 100}%` }}><span className="absolute top-1 left-2 text-[8px] font-black text-white/40 truncate w-[90%] uppercase">{seg.text}</span></div>))}
-                    <div className="absolute top-0 bottom-0 w-[2px] bg-red-500 z-20 pointer-events-none shadow-[0_0_10px_rgba(239,68,68,0.5)]" style={{ left: `${(videoPlayerRef.current?.currentTime || 0) / (videoDuration || 1) * 100}%` }} />
                 </div>
             </div>
         </div>
 
-        {/* Right Sidebar - Segment Registry */}
-        <div className="w-80 lg:w-96 border-l border-zinc-800 flex flex-col bg-zinc-950 shadow-2xl z-20">
-             <div className="p-6 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/80 sticky top-0 z-10">
-                <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Segment Registry ({segments.length})</span>
-                <button onClick={() => setSegments([...segments, { id: `seg-${Date.now()}`, text: "Add scene content...", startTime: segments.length > 0 ? segments[segments.length-1].endTime : 0, endTime: (segments.length > 0 ? segments[segments.length-1].endTime : 0) + 2, animation: 'fade' }])} className="w-12 h-12 flex items-center justify-center bg-indigo-600 hover:bg-indigo-500 rounded-2xl text-white shadow-xl shadow-indigo-600/10 transition-all active:scale-95"><Plus className="w-5 h-5"/></button>
+        <div className="w-80 lg:w-96 border-l border-zinc-800 flex flex-col bg-zinc-950">
+             <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
+                <span className="text-[10px] font-black text-zinc-600 uppercase tracking-widest">Segments ({segments.length})</span>
+                <button onClick={() => setSegments([...segments, { id: `seg-${Date.now()}`, text: "New segment", startTime: segments.length > 0 ? segments[segments.length-1].endTime : 0, endTime: (segments.length > 0 ? segments[segments.length-1].endTime : 0) + 2, animation: 'fade' }])} className="w-8 h-8 flex items-center justify-center bg-indigo-600 hover:bg-indigo-500 rounded-lg text-white transition-all"><Plus className="w-4 h-4"/></button>
              </div>
-             <div className="flex-1 overflow-y-auto p-6 space-y-5 custom-scrollbar bg-zinc-950">
+             <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
                 {segments.map((seg, i) => (
-                    <div key={seg.id} onClick={() => { setActiveSegmentIndex(i); if (videoPlayerRef.current) videoPlayerRef.current.currentTime = seg.startTime; }} className={`p-6 rounded-[32px] border transition-all cursor-pointer group relative ${activeSegmentIndex === i ? 'bg-indigo-600/5 border-indigo-600/40 shadow-xl' : 'bg-zinc-900/40 border-zinc-800/50 hover:border-zinc-700'}`}>
-                        <div className="flex items-center justify-between mb-5">
-                            <span className={`w-7 h-7 flex items-center justify-center rounded-xl text-[10px] font-black shadow-lg ${activeSegmentIndex === i ? 'bg-indigo-600 text-white' : 'bg-zinc-800 text-zinc-500'}`}>{i + 1}</span>
-                            <div className="flex items-center gap-2">
-                                <MotionIcon className={`w-3 h-3 ${activeSegmentIndex === i ? 'text-indigo-500' : 'text-zinc-700'}`} />
-                                <select 
-                                    value={seg.animation || 'none'} 
-                                    onClick={(e) => e.stopPropagation()}
-                                    onChange={(e) => setSegments(segments.map(s => s.id === seg.id ? { ...s, animation: e.target.value as CaptionAnimation } : s))}
-                                    className="bg-black/40 border border-zinc-800 rounded-xl text-[10px] px-3 py-1.5 text-zinc-400 focus:text-white transition-all outline-none"
-                                >
-                                    {ANIMATIONS.map(a => <option key={a.id} value={a.id}>{a.label}</option>)}
-                                </select>
-                            </div>
+                    <div key={seg.id} onClick={() => { setActiveSegmentIndex(i); if (videoPlayerRef.current) videoPlayerRef.current.currentTime = seg.startTime; }} className={`p-4 rounded-3xl border transition-all cursor-pointer ${activeSegmentIndex === i ? 'bg-indigo-600/5 border-indigo-600/40' : 'bg-zinc-900/40 border-zinc-800/50 hover:border-zinc-700'}`}>
+                        <div className="flex items-center justify-between mb-2">
+                            <span className={`w-5 h-5 flex items-center justify-center rounded-lg text-[10px] font-black ${activeSegmentIndex === i ? 'bg-indigo-600 text-white' : 'bg-zinc-800 text-zinc-500'}`}>{i + 1}</span>
+                            <button onClick={(e) => { e.stopPropagation(); setSegments(segments.filter(s => s.id !== seg.id)); }} className="text-zinc-700 hover:text-red-500"><Trash2 className="w-3 h-3"/></button>
                         </div>
-                        <textarea value={seg.text} onClick={(e) => e.stopPropagation()} onChange={(e) => setSegments(segments.map(s => s.id === seg.id ? { ...s, text: e.target.value } : s))} className={`w-full bg-transparent border-none text-sm focus:outline-none resize-none leading-relaxed transition-colors ${activeSegmentIndex === i ? 'text-white font-bold' : 'text-zinc-500'}`} rows={2} placeholder="Scene narrative..." />
-                        
-                        <div className="flex items-center justify-between mt-5 pt-5 border-t border-zinc-800/50">
-                            <div className="flex gap-4">
-                                <div className="flex flex-col gap-1.5"><span className="text-[8px] text-zinc-600 font-bold uppercase tracking-widest">Entry</span><div className="flex items-center gap-1 bg-black/40 p-2 rounded-xl border border-zinc-800"><button onClick={(e) => { e.stopPropagation(); adjustTime(seg.id, 'startTime', -0.1); }} className="hover:text-white transition-colors"><Minus className="w-2.5 h-2.5"/></button><span className="text-[10px] font-mono w-10 text-center text-zinc-400">{seg.startTime.toFixed(1)}</span><button onClick={(e) => { e.stopPropagation(); adjustTime(seg.id, 'startTime', 0.1); }} className="hover:text-white transition-colors"><Plus className="w-2.5 h-2.5"/></button></div></div>
-                                <div className="flex flex-col gap-1.5"><span className="text-[8px] text-zinc-600 font-bold uppercase tracking-widest">Exit</span><div className="flex items-center gap-1 bg-black/40 p-2 rounded-xl border border-zinc-800"><button onClick={(e) => { e.stopPropagation(); adjustTime(seg.id, 'endTime', -0.1); }} className="hover:text-white transition-colors"><Minus className="w-2.5 h-2.5"/></button><span className="text-[10px] font-mono w-10 text-center text-zinc-400">{seg.endTime.toFixed(1)}</span><button onClick={(e) => { e.stopPropagation(); adjustTime(seg.id, 'endTime', 0.1); }} className="hover:text-white transition-colors"><Plus className="w-2.5 h-2.5"/></button></div></div>
-                            </div>
-                            <button onClick={(e) => { e.stopPropagation(); setSegments(segments.filter(s => s.id !== seg.id)); }} className="text-zinc-700 hover:text-red-500 transition-colors p-2"><Trash2 className="w-4 h-4"/></button>
+                        <textarea value={seg.text} onClick={(e) => e.stopPropagation()} onChange={(e) => setSegments(segments.map(s => s.id === seg.id ? { ...s, text: e.target.value } : s))} className={`w-full bg-transparent border-none text-xs font-bold focus:outline-none resize-none leading-relaxed ${activeSegmentIndex === i ? 'text-white' : 'text-zinc-500'}`} rows={2} />
+                        <div className="flex items-center gap-2 mt-2">
+                          <div className="flex-1 bg-zinc-950 border border-zinc-800 rounded p-1 flex items-center gap-1">
+                            <button onClick={(e) => { e.stopPropagation(); adjustTime(seg.id, 'startTime', -0.1); }}><Minus className="w-3 h-3"/></button>
+                            <span className="text-[9px] font-mono flex-1 text-center">{seg.startTime.toFixed(1)}s</span>
+                            <button onClick={(e) => { e.stopPropagation(); adjustTime(seg.id, 'startTime', 0.1); }}><Plus className="w-3 h-3"/></button>
+                          </div>
+                          <div className="flex-1 bg-zinc-950 border border-zinc-800 rounded p-1 flex items-center gap-1">
+                            <button onClick={(e) => { e.stopPropagation(); adjustTime(seg.id, 'endTime', -0.1); }}><Minus className="w-3 h-3"/></button>
+                            <span className="text-[9px] font-mono flex-1 text-center">{seg.endTime.toFixed(1)}s</span>
+                            <button onClick={(e) => { e.stopPropagation(); adjustTime(seg.id, 'endTime', 0.1); }}><Plus className="w-3 h-3"/></button>
+                          </div>
                         </div>
                     </div>
                 ))}
              </div>
         </div>
       </div>
-      <style>{`
-        .style-outline { -webkit-text-stroke: 2px black; text-shadow: 4px 4px 0px rgba(0,0,0,0.8); }
-        .style-neon { text-shadow: 0 0 10px currentColor, 0 0 20px currentColor, 0 0 40px rgba(255,255,255,0.4); }
-        .style-3d { text-shadow: 0 1px 0 #ccc, 0 2px 0 #c9c9c9, 0 3px 0 #bbb, 0 4px 0 #b9b9b9, 0 5px 0 #aaa, 0 6px 1px rgba(0,0,0,.3), 0 0 5px rgba(0,0,0,.2); transform: perspective(500px) rotateX(10deg); }
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #18181b; border-radius: 10px; }
-
-        @keyframes anim-fade { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes anim-pop { 0% { opacity: 0; transform: scale(0.6); } 70% { transform: scale(1.05); } 100% { opacity: 1; transform: scale(1); } }
-        @keyframes anim-slide-up { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes anim-zoom-in { from { opacity: 0; transform: scale(1.1); } to { opacity: 1; transform: scale(1); } }
-        @keyframes anim-typewriter { from { width: 0; } to { width: 100%; } }
-
-        .anim-fade { animation: anim-fade 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
-        .anim-pop { animation: anim-pop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
-        .anim-slide-up { animation: anim-slide-up 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
-        .anim-zoom-in { animation: anim-zoom-in 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
-        .anim-typewriter { overflow: hidden; white-space: nowrap; animation: anim-typewriter 0.5s steps(40, end); }
-      `}</style>
     </div>
   );
 };

@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback } from 'react';
 import Header from './components/Header';
 import ControlPanel from './components/ControlPanel';
@@ -7,10 +6,13 @@ import Animator from './components/Animator';
 import CaptionStudio from './components/CaptionStudio';
 import StoryStudio from './components/StoryStudio';
 import VideoStudio from './components/VideoStudio';
+import LandingPage from './components/LandingPage';
 import { GenerationConfig, ModelType, AspectRatio, ImageResolution, GeneratedContent, GenerationMode } from './types';
-import { generateImage, generateSpeech, generateStory } from './services/geminiService';
+// Fix: Removed non-existent export 'generateStory' to resolve module error
+import { generateImage, generateSpeech } from './services/geminiService';
 
 const App: React.FC = () => {
+  const [showLanding, setShowLanding] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [generatedContent, setGeneratedContent] = useState<GeneratedContent[]>([]);
@@ -74,11 +76,13 @@ const App: React.FC = () => {
   const handleEnterRiggingMode = (imageUrl: string) => {
       setConfig(prev => ({
           ...prev,
+          mode: GenerationMode.ANIMATOR,
           isRigging: true,
           referenceImage: imageUrl,
           boneConfigurations: [],
           model: ModelType.FLASH_IMAGE
       }));
+      window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleEditImage = (item: GeneratedContent) => {
@@ -95,9 +99,14 @@ const App: React.FC = () => {
       referenceImage: item.url,
       model: ModelType.FLASH_IMAGE
     }));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const dismissError = () => setError(null);
+
+  if (showLanding) {
+    return <LandingPage onStart={() => setShowLanding(false)} />;
+  }
 
   // --- MODE SPECIFIC WORKSPACES ---
   if (config.mode === GenerationMode.ANIMATOR) {

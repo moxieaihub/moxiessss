@@ -1,7 +1,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
-import { ModelType, AspectRatio, GenerationConfig, GenerationMode, VoiceName, ModelPose, ModelView, ModelMaterial, Bone, BoneConfiguration, AnimationFormat, AnimationQuality, StoryScene, StoryEntity } from '../types';
-import { Zap, Layers, Palette, Copy, ImageIcon, Mic, Volume2, Layout, Upload, X, Square, Trash2, Box, Move, Bone as BoneIcon, Film, Settings, Clock, FileVideo, Cube, Hexagon, BookOpen, Plus, Minus, FilmStrip, MessageSquare, Users, MapPin, PenTool, Users as UserIcon, Check, Link, Loader2, Sparkles, Wand2, ChevronRight, ChevronDown, TypeIcon } from './Icons';
+import { ModelType, AspectRatio, GenerationConfig, GenerationMode, VoiceName, ModelPose, ModelView, ModelMaterial, Bone, BoneConfiguration, AnimationFormat, AnimationQuality, StoryScene, StoryEntity, ThumbnailNiche } from '../types';
+import { Zap, Layers, Palette, Copy, ImageIcon, Mic, Volume2, Layout, Upload, X, Square, Trash2, Box, Move, Bone as BoneIcon, Film, Settings, Clock, FileVideo, Cube, Hexagon, BookOpen, Plus, Minus, FilmStrip, MessageSquare, Users, MapPin, PenTool, Users as UserIcon, Check, Link, Loader2, Sparkles, Wand2, ChevronRight, ChevronDown, TypeIcon, Film as MovieIcon, Gamepad2, Heart, Monitor, Book } from './Icons';
 import { suggestCaption } from '../services/geminiService';
 
 interface ControlPanelProps {
@@ -19,6 +19,7 @@ const STYLES = [
   { id: 'oil-painting', name: 'Oil Painting', prompt: 'oil painting, textured brushstrokes, classical, masterpiece, traditional art' },
   { id: 'cyberpunk', name: 'Cyberpunk', prompt: 'cyberpunk, neon, futuristic, synthwave, high contrast, dark atmosphere' },
   { id: 'pixel-art', name: 'Pixel Art', prompt: 'pixel art, 16-bit, retro game style, dithering, low res' },
+  { id: 'story-anime', name: 'Plain Anime', prompt: 'masterpiece, minimalist storytelling aesthetic, flat pure white background, clean hand-drawn anime art with vibrant character colors, emotional character on left side, large hand-written style bold text on right side, high contrast, comic book style, no shadows, no gradients, clean composition' },
 ];
 
 const CAPTION_FONTS = [
@@ -27,6 +28,7 @@ const CAPTION_FONTS = [
   { id: 'Open Sans', name: 'Open Sans' },
   { id: 'Montserrat', name: 'Montserrat' },
   { id: 'Lato', name: 'Lato' },
+  { id: 'Caveat', name: 'Caveat (Handwritten)' },
 ];
 
 const CAPTION_STYLES = [
@@ -42,6 +44,15 @@ const PLATFORMS = [
   { id: 'tiktok', name: 'TikTok/Shorts', ratio: AspectRatio.PORTRAIT_9_16 },
   { id: 'instagram', name: 'Instagram', ratio: AspectRatio.SQUARE },
   { id: 'linkedin', name: 'LinkedIn', ratio: AspectRatio.LANDSCAPE_16_9 },
+];
+
+const NICHES = [
+  { id: ThumbnailNiche.TUTORIAL, name: 'Tutorial', icon: PenTool, subNiches: ['YouTube Strategy', 'Faceless Channel', 'AI Tools', 'Animation Guide', 'Video Editing', 'Coding'] },
+  { id: ThumbnailNiche.MOVIE, name: 'Movie', icon: MovieIcon, subNiches: ['Action/Thriller', 'Horror/Suspense', 'Documentary', 'Animation', 'Sci-Fi'] },
+  { id: ThumbnailNiche.GAMING, name: 'Gaming', icon: Gamepad2, subNiches: ["Let's Play", 'Review', 'Esports', 'Mobile Gaming', 'Walkthrough'] },
+  { id: ThumbnailNiche.LIFESTYLE, name: 'Lifestyle', icon: Heart, subNiches: ['Vlog', 'Travel', 'Fashion', 'Minimalist', 'Productivity'] },
+  { id: ThumbnailNiche.TECH, name: 'Tech', icon: Monitor, subNiches: ['Unboxing', 'Review', 'News', 'Setup Tour', 'Comparison'] },
+  { id: ThumbnailNiche.STORYTELLING, name: 'Story', icon: Book, subNiches: ['Dark Anime Story', 'True Crime', 'Mystery', 'History', 'Motivation', 'Creepypasta'] },
 ];
 
 const RATIOS = [
@@ -74,6 +85,7 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ config, setConfig, isLoadin
     if (config.mode === GenerationMode.THUMBNAIL) {
       if (!config.thumbnailPlatform) setConfig(prev => ({ ...prev, thumbnailPlatform: 'youtube', aspectRatio: AspectRatio.LANDSCAPE_16_9 }));
       if (!config.thumbnailLayout) setConfig(prev => ({ ...prev, thumbnailLayout: 'standard' }));
+      if (!config.niche) setConfig(prev => ({ ...prev, niche: ThumbnailNiche.TUTORIAL, subNiche: 'Software Guide' }));
     } else if (config.mode === GenerationMode.LOGO) setConfig(prev => ({ ...prev, aspectRatio: AspectRatio.SQUARE }));
     else if (config.mode === GenerationMode.STORY) setConfig(prev => ({ ...prev, aspectRatio: AspectRatio.LANDSCAPE_16_9 }));
     else if (config.mode === GenerationMode.CAPTIONS) setConfig(prev => ({ ...prev, aspectRatio: AspectRatio.PORTRAIT_9_16 }));
@@ -216,6 +228,37 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ config, setConfig, isLoadin
       {config.mode === GenerationMode.THUMBNAIL && (
         <div className="space-y-6">
           <div className="space-y-3">
+            <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2">Niche Selection</label>
+            <div className="grid grid-cols-3 gap-2">
+              {NICHES.map(n => (
+                <button 
+                  key={n.id} 
+                  onClick={() => setConfig(prev => ({ ...prev, niche: n.id, subNiche: n.subNiches[0] }))}
+                  className={`p-2.5 rounded-xl border flex flex-col items-center gap-1.5 transition-all ${config.niche === n.id ? 'bg-indigo-600 border-indigo-500' : 'bg-zinc-950 border-zinc-800 hover:border-zinc-700'}`}
+                >
+                  <n.icon className={`w-4 h-4 ${config.niche === n.id ? 'text-white' : 'text-zinc-500'}`} />
+                  <span className={`text-[8px] font-black uppercase ${config.niche === n.id ? 'text-white' : 'text-zinc-400'}`}>{n.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2">Sub-Niche Style</label>
+            <div className="flex bg-zinc-950 p-1 rounded-xl border border-zinc-800 overflow-x-auto custom-scrollbar no-scrollbar">
+              {NICHES.find(n => n.id === config.niche)?.subNiches.map(sub => (
+                <button 
+                  key={sub} 
+                  onClick={() => setConfig(prev => ({ ...prev, subNiche: sub }))}
+                  className={`whitespace-nowrap px-4 py-2 text-[9px] font-black uppercase rounded-lg transition-all ${config.subNiche === sub ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-600 hover:text-zinc-400'}`}
+                >
+                  {sub}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-3">
             <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2">Platform Context</label>
             <div className="grid grid-cols-2 gap-2">
               {PLATFORMS.map(p => (
@@ -272,7 +315,28 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ config, setConfig, isLoadin
         </div>
       </div>
 
-      <div className="space-y-2">
+      <div className="space-y-4">
+        {config.referenceImage && (
+          <div className="space-y-2 animate-in fade-in zoom-in-95 duration-300">
+            <div className="flex items-center justify-between">
+              <label className="text-[10px] font-black text-indigo-400 uppercase tracking-widest flex items-center gap-2">
+                <ImageIcon className="w-3 h-3" /> Editing Reference
+              </label>
+              <button 
+                onClick={() => setConfig(prev => ({ ...prev, referenceImage: null }))}
+                className="text-[10px] text-zinc-600 hover:text-red-400 font-black uppercase tracking-widest"
+              >
+                Clear
+              </button>
+            </div>
+            <div className="relative group aspect-square rounded-2xl overflow-hidden border border-indigo-500/30 bg-zinc-900">
+              <img src={config.referenceImage} className="w-full h-full object-contain" />
+              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                <span className="text-[9px] font-black text-white uppercase tracking-widest">Base Reference Active</span>
+              </div>
+            </div>
+          </div>
+        )}
         <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center justify-between">Description <span className="text-zinc-700">{config.prompt.length}/30000</span></label>
         <textarea value={config.prompt} onChange={handlePromptChange} placeholder="Describe your vision in detail..." className="w-full h-32 bg-zinc-950 border border-zinc-800 rounded-2xl p-4 text-sm text-white resize-none focus:border-indigo-500 transition-colors" maxLength={30000} />
       </div>

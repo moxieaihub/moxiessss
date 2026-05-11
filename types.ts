@@ -90,6 +90,15 @@ export interface CaptionSegment {
   animation?: CaptionAnimation;
 }
 
+export enum ThumbnailNiche {
+  TUTORIAL = 'tutorial',
+  MOVIE = 'movie',
+  GAMING = 'gaming',
+  LIFESTYLE = 'lifestyle',
+  TECH = 'tech',
+  STORYTELLING = 'storytelling'
+}
+
 export interface GenerationConfig {
   mode: GenerationMode;
   prompt: string;
@@ -112,6 +121,8 @@ export interface GenerationConfig {
   thumbnailTitle?: string;
   thumbnailPlatform?: 'youtube' | 'tiktok' | 'instagram' | 'linkedin';
   thumbnailLayout?: 'standard' | 'before-after';
+  niche?: ThumbnailNiche;
+  subNiche?: string;
   captionColor?: string;
   captionSize?: 'small' | 'medium' | 'large' | 'xl';
   captionStyle?: 'bold' | 'outline' | 'neon' | '3d' | 'minimalist' | 'gradient';
@@ -137,6 +148,11 @@ export interface GenerationConfig {
   animationDuration?: number;
   animationFormat?: AnimationFormat;
   animationQuality?: AnimationQuality;
+
+  // Flipbook/Motion specific
+  motionIntensity?: number;
+  motionProfile?: 'fluid' | 'subtle' | 'epic' | 'jitter';
+  frameDensity?: 'economy' | 'balanced' | 'ultra';
 
   // Caption Studio Specific
   captionScript?: string;
