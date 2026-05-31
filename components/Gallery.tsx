@@ -1,13 +1,13 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { GeneratedContent } from '../types';
-import { Download, Loader2, Copy, Volume2, Bone, Play, Pause, Film, FileVideo, PenTool } from './Icons';
+import { GeneratedContent, GenerationMode } from '../types';
+import { Download, Loader2, Copy, Volume2, Play, Pause, Film, FileVideo, PenTool, Sparkles, Wand2, BookOpen, Hexagon, Layout, ImageIcon, ChevronRight, Zap } from './Icons';
 
 interface GalleryProps {
   items: GeneratedContent[];
   isLoading: boolean;
-  onRigImage?: (url: string) => void;
   onEditImage?: (item: GeneratedContent) => void;
+  onSelectPrompt?: (prompt: string, mode: GenerationMode) => void;
 }
 
 const AnimationPlayer: React.FC<{ frames: string[], thumbnail: string, duration?: number }> = ({ frames, thumbnail, duration = 3 }) => {
@@ -61,7 +61,7 @@ const AnimationPlayer: React.FC<{ frames: string[], thumbnail: string, duration?
     );
 };
 
-const Gallery: React.FC<GalleryProps> = ({ items, isLoading, onRigImage, onEditImage }) => {
+const Gallery: React.FC<GalleryProps> = ({ items, isLoading, onEditImage, onSelectPrompt }) => {
   const [isExporting, setIsExporting] = useState<string | null>(null);
 
   // Fix: Expanded the allowed types to include 'video' to prevent type mismatch in handleDownloadAll on line 154
@@ -179,13 +179,100 @@ const Gallery: React.FC<GalleryProps> = ({ items, isLoading, onRigImage, onEditI
   }
 
   if (items.length === 0) {
+    const STARTERS = [
+      {
+        title: "Lost Jungle Ruins",
+        desc: "Lush ancient mossy temple consumed by jungle vines, sunset golden lighting, cinematic 8k",
+        prompt: "Dramatic wide angle shot of long-lost ancient temple ruins consumed by deep green mossy vines, hidden deep inside a mist-shrouded jungle, sunset volumetric lighting, cinematic atmosphere, 8k",
+        mode: GenerationMode.IMAGE,
+        icon: ImageIcon,
+        styleClass: "from-amber-600/15 via-transparent to-transparent border-amber-950/40 hover:border-amber-500/40 focus:ring-amber-500/20 text-amber-400"
+      },
+      {
+        title: "Neon Origami Crane",
+        desc: "Glowing magenta and violet origami emblem, clean aesthetic, high contrast vector lines",
+        prompt: "Geometric vector logo design of an elegant folding origami crane glowing with magenta and violet neon light, minimalist composition, pure matte dark background, high contrast lines",
+        mode: GenerationMode.LOGO,
+        icon: Hexagon,
+        styleClass: "from-pink-600/15 via-transparent to-transparent border-pink-950/40 hover:border-pink-500/40 focus:ring-pink-500/20 text-pink-400"
+      },
+      {
+        title: "Plain Anime Fantasy",
+        desc: "Modern anime illustration overlooking sparkling starry ocean sky with bold typographic layout",
+        prompt: "Masterpiece minimalism, hand-drawn anime silhouette overlooking a sparkling fantasy ocean, clear starry night sky, large bold typography space, aesthetic high contrast composition",
+        mode: GenerationMode.STORY,
+        icon: BookOpen,
+        styleClass: "from-teal-600/15 via-transparent to-transparent border-teal-950/40 hover:border-teal-500/40 focus:ring-teal-500/20 text-teal-400"
+      },
+      {
+        title: "Sleek Commercial Space",
+        desc: "Tech-forward minimalist desk accessory setup, symmetric cinematic branding visual",
+        prompt: "Modern dark matte tactile product backdrop with sleek glowing gadget accessories arranged symmetrically, perfect 8k resolution, crisp advertising studio photography, deep blue accents",
+        mode: GenerationMode.THUMBNAIL,
+        icon: Layout,
+        styleClass: "from-indigo-600/15 via-transparent to-transparent border-indigo-950/40 hover:border-indigo-500/40 focus:ring-indigo-500/20 text-indigo-400"
+      }
+    ];
+
     return (
-      <div className="flex-1 flex flex-col items-center justify-center min-h-[500px] text-zinc-600 p-8 text-center">
-        <div className="w-24 h-24 bg-zinc-900 rounded-full flex items-center justify-center mb-6 border border-zinc-800">
-           <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="opacity-50"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+      <div className="flex-1 flex flex-col items-center justify-center p-6 lg:p-16 relative overflow-y-auto custom-scrollbar h-full bg-[#050508]/10">
+        {/* Decorative Grid and Background Glows */}
+        <div className="absolute inset-0 pointer-events-none opacity-[0.02]" style={{ backgroundImage: `radial-gradient(ellipse at 50% 50%, #ffffff 1px, transparent 1px)`, backgroundSize: '24px 24px' }}></div>
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[350px] h-[350px] bg-indigo-500/5 rounded-full blur-[100px] pointer-events-none"></div>
+        <div className="absolute bottom-1/4 right-1/4 w-[300px] h-[300px] bg-purple-500/5 rounded-full blur-[90px] pointer-events-none"></div>
+
+        <div className="max-w-2xl w-full text-center space-y-8 z-10 my-auto">
+          <div className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-indigo-500/5 border border-indigo-500/15 text-indigo-400 text-[10px] font-black uppercase tracking-[0.2em] shadow-sm animate-pulse">
+            <Sparkles className="w-3 h-3 fill-current" /> Creative Studio Active
+          </div>
+
+          <div className="space-y-3">
+            <h3 className="text-3xl md:text-4xl font-black tracking-tight text-white/90">
+              LuminaGen Workspace
+            </h3>
+            <p className="text-xs text-zinc-400 leading-relaxed max-w-lg mx-auto font-medium">
+              Configure parameters in the left panel, or select an inspirational starter card below to instantly populate your canvas details.
+            </p>
+          </div>
+
+          <div className="space-y-4 pt-4">
+            <div className="flex items-center gap-2 text-left">
+              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shadow-[0_0_6px_rgba(99,102,241,0.8)]"></span>
+              <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Inspirational Starters</span>
+            </div>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-left">
+              {STARTERS.map((starter) => {
+                const Icon = starter.icon;
+                return (
+                  <button
+                    key={starter.title}
+                    onClick={() => onSelectPrompt && onSelectPrompt(starter.prompt, starter.mode)}
+                    className={`p-5 rounded-2xl bg-gradient-to-br bg-zinc-950/40 border text-left transition-all duration-300 hover:scale-[1.01] hover:-translate-y-0.5 shadow-xl group flex flex-col justify-between h-[135px] ${starter.styleClass}`}
+                  >
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-2xs font-black uppercase tracking-widest text-zinc-500 group-hover:text-zinc-400 transition-colors">
+                          {starter.mode === GenerationMode.IMAGE && 'IMAGE'}
+                          {starter.mode === GenerationMode.LOGO && 'LOGO'}
+                          {starter.mode === GenerationMode.STORY && 'STORY'}
+                          {starter.mode === GenerationMode.THUMBNAIL && 'THUMBNAIL'}
+                        </span>
+                        <Icon className="w-3.5 h-3.5 opacity-55 group-hover:opacity-100 group-hover:scale-110 transition-all duration-300" />
+                      </div>
+                      <h4 className="text-xs font-black uppercase tracking-wide text-zinc-200 group-hover:text-white transition-colors">{starter.title}</h4>
+                      <p className="text-[10px] text-zinc-500 leading-normal line-clamp-2 font-medium">{starter.desc}</p>
+                    </div>
+                    <div className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-zinc-650 group-hover:text-indigo-400 transition-colors mt-2">
+                      <span>Populate Prompt</span>
+                      <ChevronRight className="w-3 h-3 translate-x-0 group-hover:translate-x-0.5 transition-transform" />
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
-        <h3 className="text-xl font-semibold text-zinc-300 mb-2">Ready to Create</h3>
-        <p className="max-w-md">Select a mode (Image or Speech) and describe your vision to start generating instantly.</p>
       </div>
     );
   }
@@ -275,16 +362,7 @@ const Gallery: React.FC<GalleryProps> = ({ items, isLoading, onRigImage, onEditI
                                             </button>
                                         )}
 
-                                        {/* Rigging Button - Only if it looks like a 3D model prompt or user manually wants to */}
-                                        {onRigImage && (
-                                            <button 
-                                                onClick={(e) => { e.stopPropagation(); onRigImage(item.url); }}
-                                                className="flex items-center gap-2 px-3 py-2 bg-indigo-600 text-white text-xs font-bold rounded-full hover:bg-indigo-500 transition-colors shadow-lg"
-                                                title="Control Bones & Pose"
-                                            >
-                                                <Bone className="w-3.5 h-3.5" /> Rig & Pose
-                                            </button>
-                                        )}
+
 
                                         <button 
                                             onClick={(e) => { e.stopPropagation(); handleDownload(item.url, item.id, 'image'); }}

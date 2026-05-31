@@ -169,6 +169,7 @@ export interface GeneratedContent {
   prompt: string;
   model: ModelType | string;
   timestamp: number;
+  mode?: GenerationMode;
   aspectRatio?: string;
   voice?: string;
   frames?: string[];

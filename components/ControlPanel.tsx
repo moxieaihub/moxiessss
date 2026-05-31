@@ -2,7 +2,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ModelType, AspectRatio, GenerationConfig, GenerationMode, VoiceName, ModelPose, ModelView, ModelMaterial, Bone, BoneConfiguration, AnimationFormat, AnimationQuality, StoryScene, StoryEntity, ThumbnailNiche } from '../types';
 import { Zap, Layers, Palette, Copy, ImageIcon, Mic, Volume2, Layout, Upload, X, Square, Trash2, Box, Move, Bone as BoneIcon, Film, Settings, Clock, FileVideo, Cube, Hexagon, BookOpen, Plus, Minus, FilmStrip, MessageSquare, Users, MapPin, PenTool, Users as UserIcon, Check, Link, Loader2, Sparkles, Wand2, ChevronRight, ChevronDown, TypeIcon, Film as MovieIcon, Gamepad2, Heart, Monitor, Book } from './Icons';
-import { suggestCaption } from '../services/geminiService';
+import { suggestCaption, enhancePrompt } from '../services/geminiService';
 
 interface ControlPanelProps {
   config: GenerationConfig;
@@ -80,6 +80,20 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ config, setConfig, isLoadin
   const [recordingDuration, setRecordingDuration] = useState(0);
   const timerRef = useRef<number | null>(null);
   const [isSuggestingCaption, setIsSuggestingCaption] = useState(false);
+  const [isEnhancingPrompt, setIsEnhancingPrompt] = useState(false);
+
+  const handleEnhancePrompt = async () => {
+    if (!config.prompt.trim()) return;
+    setIsEnhancingPrompt(true);
+    try {
+      const enhanced = await enhancePrompt(config.prompt);
+      setConfig(prev => ({ ...prev, prompt: enhanced }));
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsEnhancingPrompt(false);
+    }
+  };
 
   useEffect(() => {
     if (config.mode === GenerationMode.THUMBNAIL) {
@@ -144,52 +158,6 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ config, setConfig, isLoadin
   };
 
   const stopRecording = () => { if (mediaRecorder && isRecording) { mediaRecorder.stop(); setIsRecording(false); } };
-
-  const renderSpeechControls = () => (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-      <div className="flex bg-zinc-950 p-1 rounded-xl border border-zinc-800">
-        <button onClick={() => setConfig(prev => ({ ...prev, speechMode: 'text', audioInput: null }))} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${config.speechMode === 'text' ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-500 hover:text-zinc-300'}`}>Text to Speech</button>
-        <button onClick={() => setConfig(prev => ({ ...prev, speechMode: 'mic' }))} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${config.speechMode === 'mic' ? 'bg-indigo-600 text-white shadow-lg' : 'text-zinc-500 hover:text-zinc-300'}`}>Voice Clone</button>
-      </div>
-
-      {config.speechMode === 'text' ? (
-        <div className="space-y-2">
-          <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Script Content</label>
-          <textarea value={config.prompt} onChange={handlePromptChange} placeholder="Type what the AI should say..." className="w-full h-32 bg-zinc-950 border border-zinc-800 rounded-2xl p-4 text-sm text-white resize-none focus:border-indigo-500 transition-colors"/>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Input Voice Sample</label>
-          <div className="aspect-video bg-zinc-950 border-2 border-dashed border-zinc-800 rounded-3xl flex flex-col items-center justify-center p-6 gap-4">
-            {config.audioInput ? (
-              <div className="flex flex-col items-center gap-3">
-                <div className="w-12 h-12 bg-emerald-500/20 text-emerald-500 rounded-full flex items-center justify-center"><Check className="w-6 h-6" /></div>
-                <span className="text-xs font-bold text-zinc-400">Audio Captured</span>
-                <button onClick={() => setConfig(prev => ({ ...prev, audioInput: null }))} className="text-[10px] text-zinc-600 hover:text-red-400 uppercase font-bold">Clear Sample</button>
-              </div>
-            ) : (
-              <>
-                <div className={`w-16 h-16 rounded-full flex items-center justify-center transition-all ${isRecording ? 'bg-red-500 animate-pulse' : 'bg-zinc-800 text-zinc-400'}`}><Mic className="w-8 h-8" /></div>
-                <div className="text-center space-y-1"><p className="text-xs font-bold text-zinc-300">{isRecording ? `Recording... ${recordingDuration}s` : 'Capture your voice'}</p><p className="text-[10px] text-zinc-600 uppercase">AI will match your tone and pitch</p></div>
-                <button onClick={isRecording ? stopRecording : startRecording} className={`px-6 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${isRecording ? 'bg-zinc-100 text-black hover:bg-white' : 'bg-indigo-600 text-white hover:bg-indigo-500 shadow-xl shadow-indigo-500/10'}`}>{isRecording ? 'Stop Recording' : 'Start Recording'}</button>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
-      <div className="space-y-4">
-        <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Speaker Voice</label>
-        <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto custom-scrollbar pr-1">
-          {VOICES.map((v) => (
-            <button key={v.id} onClick={() => setConfig(prev => ({ ...prev, voice: v.id }))} className={`p-3 rounded-2xl border text-left transition-all ${config.voice === v.id ? 'bg-indigo-600/10 border-indigo-600' : 'bg-zinc-950 border-zinc-800 hover:border-zinc-700'}`}>
-              <div className="flex flex-col"><span className={`text-xs font-black ${config.voice === v.id ? 'text-white' : 'text-zinc-300'}`}>{v.name}</span><span className="text-[9px] text-zinc-600 font-bold uppercase">{v.gender}</span></div>
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
 
   const renderStoryControls = () => (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300 flex flex-col items-center justify-center py-20 text-center">
@@ -337,8 +305,37 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ config, setConfig, isLoadin
             </div>
           </div>
         )}
-        <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center justify-between">Description <span className="text-zinc-700">{config.prompt.length}/30000</span></label>
-        <textarea value={config.prompt} onChange={handlePromptChange} placeholder="Describe your vision in detail..." className="w-full h-32 bg-zinc-950 border border-zinc-800 rounded-2xl p-4 text-sm text-white resize-none focus:border-indigo-500 transition-colors" maxLength={30000} />
+        <div className="flex items-center justify-between">
+          <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-1.5">
+            Description <span className="text-zinc-700 font-bold">({config.prompt.length}/30000)</span>
+          </label>
+          <button
+            type="button"
+            disabled={isEnhancingPrompt || !config.prompt.trim()}
+            onClick={handleEnhancePrompt}
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all border ${
+              isEnhancingPrompt 
+                ? 'bg-zinc-900 border-zinc-800 text-zinc-500 animate-pulse' 
+                : !config.prompt.trim()
+                ? 'bg-transparent border-transparent text-zinc-700 cursor-not-allowed'
+                : 'bg-indigo-600/10 border-indigo-500/25 text-indigo-400 hover:bg-indigo-600/20 hover:border-indigo-500/40 shadow-sm'
+            }`}
+            title="Expand prompt with AI generator instructions"
+          >
+            {isEnhancingPrompt ? (
+              <>
+                <Loader2 className="w-2.5 h-2.5 animate-spin text-indigo-400" />
+                Enhancing
+              </>
+            ) : (
+              <>
+                <Wand2 className="w-2.5 h-2.5" />
+                AI Enhance
+              </>
+            )}
+          </button>
+        </div>
+        <textarea value={config.prompt} onChange={handlePromptChange} placeholder="Describe your vision in detail..." className="w-full h-32 bg-zinc-950 border border-zinc-800 focus:border-indigo-500 rounded-2xl p-4 text-sm text-white resize-none outline-none transition-colors placeholder:text-zinc-600 focus:ring-1 focus:ring-indigo-500/20 font-medium" maxLength={30000} />
       </div>
 
       {config.mode === GenerationMode.THUMBNAIL && (
@@ -417,49 +414,55 @@ const ControlPanel: React.FC<ControlPanelProps> = ({ config, setConfig, isLoadin
   );
 
   return (
-    <div className="w-full lg:w-96 flex-shrink-0 flex flex-col p-0 border-b lg:border-b-0 lg:border-r border-zinc-800 bg-zinc-950/40 shadow-2xl z-30">
-      <div className="flex border-b border-zinc-800 overflow-x-auto custom-scrollbar bg-zinc-950/80 sticky top-0 z-10 backdrop-blur-md">
-        <button onClick={() => setMode(GenerationMode.IMAGE)} className={`flex-1 min-w-[70px] py-4 text-[10px] font-black uppercase tracking-widest flex flex-col items-center gap-1.5 transition-all relative ${config.mode === GenerationMode.IMAGE ? 'text-white' : 'text-zinc-600 hover:text-zinc-400'}`}>
-          <ImageIcon className="w-4 h-4" /> Image
-          {config.mode === GenerationMode.IMAGE && <div className="absolute bottom-0 left-2 right-2 h-0.5 bg-indigo-500 rounded-full"></div>}
-        </button>
-        <button onClick={() => setMode(GenerationMode.VIDEO)} className={`flex-1 min-w-[70px] py-4 text-[10px] font-black uppercase tracking-widest flex flex-col items-center gap-1.5 transition-all relative ${config.mode === GenerationMode.VIDEO ? 'text-white' : 'text-zinc-600 hover:text-zinc-400'}`}>
-          <FileVideo className="w-4 h-4" /> Video
-          {config.mode === GenerationMode.VIDEO && <div className="absolute bottom-0 left-2 right-2 h-0.5 bg-indigo-500 rounded-full"></div>}
-        </button>
-        <button onClick={() => setMode(GenerationMode.THUMBNAIL)} className={`flex-1 min-w-[70px] py-4 text-[10px] font-black uppercase tracking-widest flex flex-col items-center gap-1.5 transition-all relative ${config.mode === GenerationMode.THUMBNAIL ? 'text-white' : 'text-zinc-600 hover:text-zinc-400'}`}>
-          <Layout className="w-4 h-4" /> Thumb
-          {config.mode === GenerationMode.THUMBNAIL && <div className="absolute bottom-0 left-2 right-2 h-0.5 bg-indigo-500 rounded-full"></div>}
-        </button>
-        <button onClick={() => setMode(GenerationMode.STORY)} className={`flex-1 min-w-[70px] py-4 text-[10px] font-black uppercase tracking-widest flex flex-col items-center gap-1.5 transition-all relative ${config.mode === GenerationMode.STORY ? 'text-white' : 'text-zinc-600 hover:text-zinc-400'}`}>
-          <BookOpen className="w-4 h-4" /> Story
-          {config.mode === GenerationMode.STORY && <div className="absolute bottom-0 left-2 right-2 h-0.5 bg-indigo-500 rounded-full"></div>}
-        </button>
-        <button onClick={() => setMode(GenerationMode.ANIMATOR)} className={`flex-1 min-w-[70px] py-4 text-[10px] font-black uppercase tracking-widest flex flex-col items-center gap-1.5 transition-all relative ${config.mode === GenerationMode.ANIMATOR ? 'text-white' : 'text-zinc-600 hover:text-zinc-400'}`}>
-          <FilmStrip className="w-4 h-4" /> Animator
-          {config.mode === GenerationMode.ANIMATOR && <div className="absolute bottom-0 left-2 right-2 h-0.5 bg-indigo-500 rounded-full"></div>}
-        </button>
-        <button onClick={() => setMode(GenerationMode.CAPTIONS)} className={`flex-1 min-w-[70px] py-4 text-[10px] font-black uppercase tracking-widest flex flex-col items-center gap-1.5 transition-all relative ${config.mode === GenerationMode.CAPTIONS ? 'text-white' : 'text-zinc-600 hover:text-zinc-400'}`}>
-          <MessageSquare className="w-4 h-4" /> Studio
-          {config.mode === GenerationMode.CAPTIONS && <div className="absolute bottom-0 left-2 right-2 h-0.5 bg-indigo-500 rounded-full"></div>}
-        </button>
-        <button onClick={() => setMode(GenerationMode.AUDIO)} className={`flex-1 min-w-[70px] py-4 text-[10px] font-black uppercase tracking-widest flex flex-col items-center gap-1.5 transition-all relative ${config.mode === GenerationMode.AUDIO ? 'text-white' : 'text-zinc-600 hover:text-zinc-400'}`}>
-          <Mic className="w-4 h-4" /> Speech
-          {config.mode === GenerationMode.AUDIO && <div className="absolute bottom-0 left-2 right-2 h-0.5 bg-indigo-500 rounded-full"></div>}
-        </button>
-        <button onClick={() => setMode(GenerationMode.LOGO)} className={`flex-1 min-w-[70px] py-4 text-[10px] font-black uppercase tracking-widest flex flex-col items-center gap-1.5 transition-all relative ${config.mode === GenerationMode.LOGO ? 'text-white' : 'text-zinc-600 hover:text-zinc-400'}`}>
-          <Hexagon className="w-4 h-4" /> Logo
-          {config.mode === GenerationMode.LOGO && <div className="absolute bottom-0 left-2 right-2 h-0.5 bg-indigo-500 rounded-full"></div>}
-        </button>
+    <div className="w-full lg:w-96 flex-shrink-0 flex flex-col p-0 border-b lg:border-b-0 lg:border-l border-zinc-800 bg-[#090b0e] shadow-2xl z-20">
+      <div className="flex items-center justify-between px-6 py-5 border-b border-[#161920] bg-zinc-950/90 sticky top-0 z-10 backdrop-blur-md">
+        <div className="flex items-center gap-2.5">
+          <Settings className="w-4 h-4 text-indigo-400 stroke-[2.5px] animate-spin-slow" />
+          <span className="text-[10px] font-black uppercase tracking-[0.15em] text-zinc-100">
+            {config.mode === GenerationMode.IMAGE && 'Image Workspace'}
+            {config.mode === GenerationMode.THUMBNAIL && 'Thumbnail Setup'}
+            {config.mode === GenerationMode.LOGO && 'Logo Parameters'}
+            {config.mode === GenerationMode.STORY && 'Story Parameters'}
+            {config.mode === GenerationMode.CAPTIONS && 'Caption Settings'}
+          </span>
+        </div>
+        <div className="flex items-center gap-1">
+          <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></span>
+          <span className="text-[8px] font-bold uppercase text-zinc-500 tracking-wider">Active</span>
+        </div>
       </div>
 
       <div className="flex flex-col gap-6 p-6 overflow-y-auto custom-scrollbar flex-1 bg-zinc-950/20">
-        {config.mode === GenerationMode.STORY ? renderStoryControls() : config.mode === GenerationMode.AUDIO ? renderSpeechControls() : (config.mode === GenerationMode.IMAGE || config.mode === GenerationMode.LOGO || config.mode === GenerationMode.THUMBNAIL) ? renderImageControls() : <div className="flex flex-col items-center justify-center py-20 text-center space-y-4 opacity-50"><Box className="w-12 h-12 text-zinc-700"/><p className="text-[10px] font-black uppercase tracking-widest">Workspace Active</p></div>}
+        {config.mode === GenerationMode.STORY ? renderStoryControls() : (config.mode === GenerationMode.IMAGE || config.mode === GenerationMode.LOGO || config.mode === GenerationMode.THUMBNAIL) ? renderImageControls() : <div className="flex flex-col items-center justify-center py-20 text-center space-y-4 opacity-50"><Box className="w-12 h-12 text-zinc-700"/><p className="text-[10px] font-black uppercase tracking-widest">Workspace Active</p></div>}
       </div>
 
       <div className="p-6 bg-zinc-950 border-t border-zinc-800">
-        <button onClick={onGenerate} disabled={isLoading || (config.mode !== GenerationMode.CAPTIONS && config.mode !== GenerationMode.ANIMATOR && config.mode !== GenerationMode.STORY && config.mode !== GenerationMode.VIDEO && !config.prompt.trim() && !config.audioInput)} className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-2xl flex items-center justify-center gap-3 transition-all transform active:scale-95 ${isLoading ? 'bg-zinc-800 text-zinc-600' : 'bg-indigo-600 text-white hover:bg-indigo-500 shadow-indigo-600/20'}`}>
-          {isLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> Synthesizing</> : <>{config.mode === GenerationMode.STORY ? 'Enter Story Studio' : config.mode === GenerationMode.CAPTIONS ? 'Enter Studio' : config.mode === GenerationMode.ANIMATOR ? 'Enter Animator' : config.mode === GenerationMode.VIDEO ? 'Enter Video Studio' : 'Generate Asset'}<Zap className="w-4 h-4 fill-current" /></>}
+        <button 
+          onClick={onGenerate} 
+          disabled={isLoading || (config.mode !== GenerationMode.CAPTIONS && config.mode !== GenerationMode.STORY && !config.prompt.trim() && !config.audioInput)} 
+          className={`w-full py-4 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2.5 transition-all duration-300 transform active:scale-95 ${
+            isLoading 
+              ? 'bg-zinc-900 border border-zinc-800 text-zinc-600 cursor-not-allowed shadow-none' 
+              : 'bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 text-white hover:from-indigo-500 hover:to-purple-500 shadow-[0_4px_20px_rgba(99,102,241,0.25)] hover:shadow-[0_4px_25px_rgba(99,102,241,0.4)] border border-indigo-400/20'
+          }`}
+        >
+          {isLoading ? (
+            <>
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-white/55" /> 
+              <span>Synthesizing...</span>
+            </>
+          ) : (
+            <>
+              <span>
+                {config.mode === GenerationMode.STORY 
+                  ? 'Enter Story Studio' 
+                  : config.mode === GenerationMode.CAPTIONS 
+                  ? 'Enter Studio' 
+                  : 'Generate Asset'}
+              </span>
+              <Zap className="w-3.5 h-3.5 fill-current text-white/90" />
+            </>
+          )}
         </button>
         <p className="text-[9px] text-zinc-700 mt-4 text-center font-bold uppercase tracking-widest">Powered by LuminaGen Master Engine</p>
       </div>

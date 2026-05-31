@@ -86,6 +86,21 @@ export const suggestCaption = async (prompt: string): Promise<string> => {
     }
 };
 
+export const enhancePrompt = async (prompt: string): Promise<string> => {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    try {
+        const response = await callWithRetry(() => ai.models.generateContent({
+            model: 'gemini-3-flash-preview',
+            contents: `Expand and enrich the following description to create a highly detailed, professional, and visually stunning generative AI image/art prompt. Keep it descriptive, elegant, and concise (exactly 1 to 2 sentences).
+Original input: "${prompt}"
+Enhanced prompt text only:`,
+        }));
+        return response.text?.trim() || prompt;
+    } catch (error) {
+        return prompt;
+    }
+};
+
 export const generate3DMesh = async (prompt: string): Promise<MeshGeometry> => {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const jsonPrompt = `Generate a low-poly 3D humanoid mesh in JSON for: "${prompt}". Return {"vertices": [[x,y,z],...], "faces": [[v1,v2,v3,"hex"],...]}`;

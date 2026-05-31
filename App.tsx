@@ -2,20 +2,20 @@ import React, { useState, useCallback } from 'react';
 import Header from './components/Header';
 import ControlPanel from './components/ControlPanel';
 import Gallery from './components/Gallery';
-import Animator from './components/Animator';
 import CaptionStudio from './components/CaptionStudio';
 import StoryStudio from './components/StoryStudio';
-import VideoStudio from './components/VideoStudio';
 import LandingPage from './components/LandingPage';
+import Sidebar from './components/Sidebar';
 import { GenerationConfig, ModelType, AspectRatio, ImageResolution, GeneratedContent, GenerationMode } from './types';
 // Fix: Removed non-existent export 'generateStory' to resolve module error
-import { generateImage, generateSpeech } from './services/geminiService';
+import { generateImage } from './services/geminiService';
 
 const App: React.FC = () => {
   const [showLanding, setShowLanding] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [generatedContent, setGeneratedContent] = useState<GeneratedContent[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
   
   const [config, setConfig] = useState<GenerationConfig>({
     mode: GenerationMode.IMAGE,
@@ -44,27 +44,25 @@ const App: React.FC = () => {
   });
 
   const handleGenerate = useCallback(async () => {
-    if (config.mode === GenerationMode.CAPTIONS || config.mode === GenerationMode.STORY || config.mode === GenerationMode.VIDEO || config.mode === GenerationMode.ANIMATOR) {
+    if (config.mode === GenerationMode.CAPTIONS || config.mode === GenerationMode.STORY) {
         return;
     }
 
     const hasPrompt = config.prompt.trim().length > 0;
-    const hasAudio = !!config.audioInput;
     const isRiggingValid = config.isRigging && (config.boneConfigurations?.length || 0) > 0;
 
-    if (!hasPrompt && !hasAudio && !isRiggingValid) return;
+    if (!hasPrompt && !isRiggingValid) return;
     
     setIsLoading(true);
     setError(null);
     
     try {
-      if (config.mode === GenerationMode.AUDIO) {
-        const newAudio = await generateSpeech(config);
-        setGeneratedContent(prev => [newAudio, ...prev]);
-      } else {
-        const newImages = await generateImage(config);
-        setGeneratedContent(prev => [...newImages, ...prev]);
-      }
+      const newImages = await generateImage(config);
+      const taggedImages = newImages.map(img => ({
+        ...img,
+        mode: config.mode
+      }));
+      setGeneratedContent(prev => [...taggedImages, ...prev]);
     } catch (err: any) {
       console.error(err);
       setError(err.message || "Failed to generate content. Please try again.");
@@ -72,18 +70,6 @@ const App: React.FC = () => {
       setIsLoading(false);
     }
   }, [config]);
-
-  const handleEnterRiggingMode = (imageUrl: string) => {
-      setConfig(prev => ({
-          ...prev,
-          mode: GenerationMode.ANIMATOR,
-          isRigging: true,
-          referenceImage: imageUrl,
-          boneConfigurations: [],
-          model: ModelType.FLASH_IMAGE
-      }));
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
 
   const handleEditImage = (item: GeneratedContent) => {
     let mode = GenerationMode.IMAGE;
@@ -108,63 +94,37 @@ const App: React.FC = () => {
     return <LandingPage onStart={() => setShowLanding(false)} />;
   }
 
-  // --- MODE SPECIFIC WORKSPACES ---
-  if (config.mode === GenerationMode.ANIMATOR) {
-      return (
-          <Animator 
-             config={config} 
-             setConfig={setConfig} 
-             onExit={() => setConfig(prev => ({...prev, mode: GenerationMode.IMAGE}))}
-          />
-      );
-  }
-
-  if (config.mode === GenerationMode.VIDEO) {
-    return (
-        <VideoStudio 
-          config={config}
-          setConfig={setConfig}
-          onExit={() => setConfig(prev => ({...prev, mode: GenerationMode.IMAGE}))}
-        />
+  // Screen-specific prompt filter ensuring items generated in different modes remain fully separate
+  const filteredContent = generatedContent.filter(item => {
+    // Determine if the item belongs to the currently active studio screen
+    const itemMode = item.mode || (
+      item.prompt.toLowerCase().includes('logo') ? GenerationMode.LOGO :
+      item.prompt.toLowerCase().includes('thumbnail') ? GenerationMode.THUMBNAIL :
+      GenerationMode.IMAGE
     );
-  }
-
-  if (config.mode === GenerationMode.CAPTIONS) {
-      return (
-          <CaptionStudio 
-            config={config}
-            setConfig={setConfig}
-            onExit={() => setConfig(prev => ({...prev, mode: GenerationMode.IMAGE}))}
-          />
-      );
-  }
-
-  if (config.mode === GenerationMode.STORY) {
-    return (
-      <StoryStudio 
-        config={config}
-        setConfig={setConfig}
-        onExit={() => setConfig(prev => ({...prev, mode: GenerationMode.IMAGE}))}
-      />
-    );
-  }
+    const matchesMode = itemMode === config.mode;
+    const matchesSearch = item.prompt.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (item.type && item.type.toLowerCase().includes(searchTerm.toLowerCase()));
+    
+    return matchesMode && matchesSearch;
+  });
 
   // --- STANDARD APP RENDER ---
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-200 flex flex-col font-sans">
+    <div className="min-h-screen bg-[#07080c] text-zinc-200 flex flex-col font-sans overflow-hidden">
       <Header />
       
-      <main className="flex-1 flex flex-col lg:flex-row h-[calc(100vh-64px)] overflow-hidden">
-        <div className="lg:h-full overflow-y-auto lg:overflow-visible z-10 bg-zinc-950">
-             <ControlPanel 
-                config={config} 
-                setConfig={setConfig} 
-                isLoading={isLoading} 
-                onGenerate={handleGenerate} 
-             />
-        </div>
+      <main className="flex-1 flex flex-row h-[calc(100vh-64px)] overflow-hidden">
+        {/* Left Sidebar Navigation Menu */}
+        <Sidebar 
+          currentMode={config.mode} 
+          setMode={(mode) => setConfig(prev => ({ ...prev, mode, isRigging: false }))}
+          searchTerm={searchTerm}
+          setSearchTerm={setSearchTerm}
+        />
 
-        <div className="flex-1 relative flex flex-col h-full bg-zinc-950/30 overflow-hidden">
+        {/* Center Display / Workspaces Viewport */}
+        <div className="flex-1 relative flex flex-col h-full bg-[#050608]/40 overflow-hidden">
           {error && (
             <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-md px-4">
               <div className="bg-red-500/10 border border-red-500/50 text-red-200 p-4 rounded-xl shadow-2xl backdrop-blur-md flex items-start gap-3 animate-in slide-in-from-top-4 duration-300">
@@ -184,13 +144,43 @@ const App: React.FC = () => {
             </div>
           )}
           
-          <Gallery 
-            items={generatedContent} 
-            isLoading={isLoading} 
-            onRigImage={handleEnterRiggingMode}
-            onEditImage={handleEditImage}
-          />
+          {config.mode === GenerationMode.CAPTIONS ? (
+            <CaptionStudio 
+              config={config}
+              setConfig={setConfig}
+              onExit={() => setConfig(prev => ({...prev, mode: GenerationMode.IMAGE}))}
+            />
+          ) : config.mode === GenerationMode.STORY ? (
+            <StoryStudio 
+              config={config}
+              setConfig={setConfig}
+              onExit={() => setConfig(prev => ({...prev, mode: GenerationMode.IMAGE}))}
+            />
+          ) : (
+            <Gallery 
+              items={filteredContent} 
+              isLoading={isLoading} 
+              onEditImage={handleEditImage}
+              onSelectPrompt={(selectedPrompt, mode) => {
+                setConfig(prev => ({
+                  ...prev,
+                  prompt: selectedPrompt,
+                  mode: mode
+                }));
+              }}
+            />
+          )}
         </div>
+
+        {/* Right parameters Panel */}
+        {config.mode !== GenerationMode.CAPTIONS && config.mode !== GenerationMode.STORY && (
+          <ControlPanel 
+            config={config} 
+            setConfig={setConfig} 
+            isLoading={isLoading} 
+            onGenerate={handleGenerate} 
+          />
+        )}
       </main>
     </div>
   );
